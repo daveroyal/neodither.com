@@ -472,6 +472,103 @@ export const Canvas: React.FC<CanvasProps> = ({
     return "default";
   };
 
+  const lastTouchRef = useRef<{ x: number; y: number } | null>(null);
+  const initialPinchDistanceRef = useRef<number | null>(null);
+  const initialZoomRef = useRef<number>(zoom);
+
+  const getTouchCoordinates = (event: React.TouchEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    const touch = event.touches[0];
+    return {
+      x: (touch.clientX - rect.left) * scaleX,
+      y: (touch.clientY - rect.top) * scaleY,
+    };
+  };
+
+  const handleTouchStart = (event: React.TouchEvent<HTMLCanvasElement>) => {
+    if (event.touches.length === 2) {
+      // Pinch start – store initial distance & zoom
+      const [t1, t2] = Array.from(event.touches);
+      const dx = t2.clientX - t1.clientX;
+      const dy = t2.clientY - t1.clientY;
+      initialPinchDistanceRef.current = Math.hypot(dx, dy);
+      initialZoomRef.current = zoom;
+      return;
+    }
+
+    const coords = getTouchCoordinates(event);
+
+    if (currentTool === "crop" && cropSelection) {
+      setIsDrawing(true);
+      setCropSelection({
+        startX: coords.x,
+        startY: coords.y,
+        endX: coords.x,
+        endY: coords.y,
+        active: true,
+      });
+    } else if (currentTool === "rotate" && currentImage) {
+      handleRotate();
+    } else if (currentImage) {
+      setIsDrawing(true);
+      lastTouchRef.current = coords;
+    }
+  };
+
+  const handleTouchMove = (event: React.TouchEvent<HTMLCanvasElement>) => {
+    if (event.touches.length === 2 && initialPinchDistanceRef.current) {
+      // Handle pinch-to-zoom
+      const [t1, t2] = Array.from(event.touches);
+      const dx = t2.clientX - t1.clientX;
+      const dy = t2.clientY - t1.clientY;
+      const currentDistance = Math.hypot(dx, dy);
+      const ratio = currentDistance / initialPinchDistanceRef.current;
+      const newZoom = initialZoomRef.current * ratio * 100; // maintain percentage scale
+      setZoom(Math.max(25, Math.min(500, newZoom)));
+      return;
+    }
+
+    if (!isDrawing || event.touches.length !== 1) return;
+
+    const coords = getTouchCoordinates(event);
+
+    if (currentTool === "crop" && cropSelection) {
+      setCropSelection({ ...cropSelection, endX: coords.x, endY: coords.y });
+    } else if (currentImage && lastTouchRef.current) {
+      const deltaX = coords.x - lastTouchRef.current.x;
+      const deltaY = coords.y - lastTouchRef.current.y;
+      setPanOffset((prev) => ({ x: prev.x + deltaX, y: prev.y + deltaY }));
+      lastTouchRef.current = coords;
+    }
+  };
+
+  const handleTouchEnd = (event: React.TouchEvent<HTMLCanvasElement>) => {
+    if (
+      currentTool === "crop" &&
+      cropSelection &&
+      isDrawing &&
+      cropSelection.active &&
+      event.touches.length === 0
+    ) {
+      applyCrop();
+    }
+
+    if (event.touches.length < 2) {
+      initialPinchDistanceRef.current = null;
+    }
+
+    if (event.touches.length === 0) {
+      lastTouchRef.current = null;
+      setIsDrawing(false);
+    }
+  };
+
   return (
     <div
       ref={containerRef}
@@ -706,6 +803,9 @@ export const Canvas: React.FC<CanvasProps> = ({
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={() => setIsDrawing(false)}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
             style={{
               cursor: getCursorStyle(),
               maxWidth: "100%",
@@ -716,6 +816,7 @@ export const Canvas: React.FC<CanvasProps> = ({
               boxShadow: isPreviewMode
                 ? "0 0 10px rgba(255, 255, 0, 0.5)"
                 : "inset -1px -1px var(--border-sunken), inset 1px 1px var(--border-raised)",
+              touchAction: "none", // Prevent browser gestures
             }}
           />
 

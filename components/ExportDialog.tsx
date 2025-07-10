@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { upscaleImage, isUpscaling } from "../src/utils/effects";
+import { useIsMobile } from "../src/hooks/useIsMobile";
 
 interface ExportDialogProps {
   isOpen: boolean;
@@ -46,6 +47,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [isAIProcessing, setIsAIProcessing] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const isMobile = useIsMobile();
 
   // Load original image dimensions
   useEffect(() => {
@@ -273,9 +275,10 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
       <div
         className="win99-window"
         style={{
-          width: "720px",
-          maxHeight: "85vh",
-          minHeight: "400px",
+          width: isMobile ? "95vw" : "720px",
+          maxWidth: isMobile ? "95vw" : "720px",
+          maxHeight: isMobile ? "90vh" : "85vh",
+          minHeight: isMobile ? "80vh" : "400px",
           display: "flex",
           flexDirection: "column",
         }}
@@ -298,15 +301,16 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
           style={{
             flex: 1,
             display: "flex",
-            gap: "12px",
-            overflow: "hidden",
+            flexDirection: isMobile ? "column" : "row",
+            gap: isMobile ? "8px" : "12px",
+            overflow: isMobile ? "auto" : "hidden",
             minHeight: 0,
           }}
         >
           {/* Left Panel - Format & Quality */}
           <div
             style={{
-              width: "200px",
+              width: isMobile ? "100%" : "200px",
               display: "flex",
               flexDirection: "column",
               minHeight: 0,
@@ -622,7 +626,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
           {/* Middle Panel - Output Size */}
           <div
             style={{
-              width: "200px",
+              width: isMobile ? "100%" : "200px",
               display: "flex",
               flexDirection: "column",
               minHeight: 0,
@@ -739,7 +743,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
           {/* Right Panel - Preview */}
           <div
             style={{
-              width: "240px",
+              width: isMobile ? "100%" : "240px",
               display: "flex",
               flexDirection: "column",
               minHeight: 0,
@@ -870,25 +874,38 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
             padding: "8px",
             borderTop: "1px solid var(--border-sunken)",
             display: "flex",
-            justifyContent: "flex-end",
+            justifyContent: isMobile ? "stretch" : "flex-end",
             gap: "8px",
+            flexDirection: isMobile ? "column" : "row",
           }}
         >
-          <div className="win99-button" onClick={onClose}>
+          <div 
+            className="win99-button" 
+            onClick={onClose}
+            style={{
+              padding: isMobile ? "12px" : "8px",
+              fontSize: isMobile ? "14px" : "11px",
+              minHeight: isMobile ? "44px" : "auto",
+            }}
+          >
             Cancel
           </div>
           <div
             className="win99-button"
-            onClick={handleExport}
-            disabled={!previewData}
+            onClick={previewData ? handleExport : undefined}
             style={{
               background: previewData
                 ? "var(--bg-button-hover)"
                 : "var(--bg-window)",
               fontWeight: "bold",
+              opacity: previewData ? 1 : 0.5,
+              cursor: previewData ? "pointer" : "not-allowed",
+              padding: isMobile ? "12px" : "8px",
+              fontSize: isMobile ? "14px" : "11px",
+              minHeight: isMobile ? "44px" : "auto",
             }}
           >
-            Export
+            💿 Export
           </div>
         </div>
 

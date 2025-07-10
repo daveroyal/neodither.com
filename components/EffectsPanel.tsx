@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useIsMobile } from "../src/hooks/useIsMobile";
 import {
   applyVHSEffect,
   applyGlitchEffect,
@@ -56,6 +57,7 @@ interface EffectsPanelProps {
   onCancelPreview: () => void;
   onEditLayer: (layerId: string) => void;
   onClearEffectSelection?: () => void;
+  onNavigateToCanvas?: () => void;
 }
 
 // Define types for effect parameters
@@ -496,7 +498,9 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
   onCancelPreview,
   onEditLayer,
   onClearEffectSelection,
+  onNavigateToCanvas,
 }) => {
+  const isMobile = useIsMobile();
   const [selectedEffect, setSelectedEffect] = useState<string | null>(null);
   const [effectParams, setEffectParams] = useState<
     Record<string, number | string>
@@ -557,7 +561,15 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
   const handleApplyPreview = useCallback(() => {
     onApplyPreview();
     clearEffectSelection();
-  }, [onApplyPreview, clearEffectSelection]);
+    // Reset toggle state
+    setShowOriginal(false);
+    // Navigate to canvas on mobile after applying
+    if (isMobile && onNavigateToCanvas) {
+      onNavigateToCanvas();
+    }
+  }, [onApplyPreview, clearEffectSelection, isMobile, onNavigateToCanvas]);
+
+
 
   // Load layer parameters when editing a layer
   useEffect(() => {
@@ -1050,8 +1062,101 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
             )}
           </div>
 
-          {/* Effect Toggle Button */}
-          {processedImagePreview && (
+          {/* Mobile Preview Thumbnail */}
+          {isMobile && (currentImage || processedImagePreview) && (
+            <div
+              style={{
+                marginBottom: "12px",
+                padding: "8px",
+                background: "var(--bg-content)",
+                border: "2px inset var(--border-window)",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "10px",
+                  fontWeight: "bold",
+                  marginBottom: "6px",
+                  color: "var(--text-primary)",
+                  textAlign: "center",
+                }}
+              >
+                Preview
+              </div>
+                                            {/* Large Preview with Overlay Toggle */}
+               <div style={{ textAlign: "center", position: "relative", display: "inline-block" }}>
+                 {/* Large Preview Image */}
+                 {processedImagePreview ? (
+                   <>
+                     <img
+                       src={showOriginal ? currentImage! : processedImagePreview}
+                       alt={showOriginal ? "Original" : "Preview"}
+                       style={{
+                         width: "100%",
+                         height: "auto",
+                         objectFit: "contain",
+                         border: "2px inset var(--border-window)",
+                         display: "block",
+                         margin: "0 auto",
+                       }}
+                     />
+                     
+                     {/* Overlay Toggle Button */}
+                     <button
+                       className="win99-button"
+                       onClick={handleComparisonToggle}
+                       disabled={isProcessing}
+                       style={{
+                         position: "absolute",
+                         top: "8px",
+                         right: "8px",
+                         padding: "4px",
+                         fontSize: "12px",
+                         width: "28px",
+                         height: "28px",
+                         background: "rgba(192, 192, 192, 0.9)",
+                         border: "1px outset var(--border-window)",
+                         opacity: isProcessing ? 0.7 : 1,
+                         cursor: "pointer",
+                         display: "flex",
+                         alignItems: "center",
+                         justifyContent: "center",
+                         borderRadius: "0",
+                         boxShadow: "1px 1px 2px rgba(0, 0, 0, 0.3)",
+                       }}
+                       title={showOriginal ? "Show effect" : "Show original"}
+                                            >
+                         {showOriginal ? "👁️" : "🚫"}
+                       </button>
+                   </>
+                 ) : (
+                   <div
+                     style={{
+                       width: "100%",
+                       height: "200px",
+                       border: "2px inset var(--border-window)",
+                       display: "flex",
+                       alignItems: "center",
+                       justifyContent: "center",
+                       background: "var(--bg-input)",
+                       color: "var(--text-secondary)",
+                       fontSize: "12px",
+                       margin: "0 auto",
+                       flexDirection: "column",
+                       gap: "8px",
+                     }}
+                   >
+                     <div>{isProcessing ? "⏳" : "🎨"}</div>
+                     <div>{isProcessing ? "Processing..." : "Loading Preview..."}</div>
+                   </div>
+                 )}
+               </div>
+
+            </div>
+          )}
+
+          {/* Effect Toggle Button - Hidden on Mobile */}
+          {!isMobile && processedImagePreview && (
             <div
               style={{
                 display: "flex",

@@ -690,8 +690,6 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    background: var(--bg-content);
-    border: 2px outset var(--border-window);
     min-height: 0;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
@@ -1521,17 +1519,29 @@ select:focus {
 @media (max-width: 768px) {
   .win99-app-content {
     flex-direction: column;
-    height: 100vh;
+    height: calc(100dvh - 22px); /* subtract titlebar height */
+    overflow: hidden; /* no scrolling container */
+  }
+
+  .win99-main-content {
+    position: absolute;
+    top: 74px; /* titlebar (22) + toolbar (52) */
+    left: 0;
+    right: 0;
+    bottom: 64px; /* bottom nav height */
+    overflow: hidden;
+    padding: 0;
+    margin: 0;
   }
 
   .win99-toolbar {
-    height: 80px;
-    padding: 6px;
+    height: auto;
+    min-height: 64px;
   }
 
   .win99-toolbar-content {
     padding: 4px;
-    height: calc(100% - 24px);
+    height: 100%;
     overflow-x: auto;
     overflow-y: hidden;
     display: flex;
@@ -1610,6 +1620,16 @@ select:focus {
   .win99-canvas-panel {
     flex: 1;
     min-height: 200px;
+    height: calc(100dvh - 74px - 64px - 10px); /* viewport - top - bottom - buffer */
+    max-height: calc(100dvh - 74px - 90px - 10px);
+    overflow: hidden;
+    margin-bottom: 0;
+  }
+
+  .win99-canvas-panel .win99-content {
+    padding: 0 !important;
+    height: 100% !important;
+    overflow: hidden;
   }
 
   .win99-layers-sidebar {
@@ -2163,3 +2183,147 @@ select:focus {
   background: var(--bg-button);
   border: 1px outset var(--border-window);
 }
+
+  /* Hide Windows 99 status bar entirely on phones */
+  @media (max-width: 768px) {
+    .win99-statusbar {
+      display: none !important;
+    }
+  }
+
+  /* Ensure zoom controls stay above bottom nav */
+  @media (max-width: 768px) {
+    .canvas-zoom-controls {
+      bottom: 70px !important; /* nav height + margin */
+    }
+  }
+
+  /* Mobile Bottom Nav styled like Windows 99 taskbar */
+  .mobile-bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 64px;
+    background: var(--bg-window);
+    border-top: 2px outset var(--border-window);
+    box-shadow: inset -1px -1px var(--border-sunken), inset 1px 1px var(--border-raised);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 6px;
+    z-index: 1100;
+  }
+
+  .mobile-bottom-nav .win98-toolbar-btn {
+    flex: 1 1 0;
+    width: 100%;
+    height: 52px;
+    margin: 0 2px;
+    padding: 4px 0;
+    justify-content: center; /* override flex-end */
+    align-items: center; /* ensure horizontal center */
+  }
+
+  /* Ensure canvas zoom controls stay above the nav */
+  @media (max-width: 768px) {
+    .canvas-zoom-controls {
+      bottom: 74px !important;
+    }
+  }
+
+  @media (max-width: 768px) {
+    /* Hide canvas title bar on mobile to prevent collision */
+    .win99-canvas-panel .win99-titlebar {
+      display: none;
+    }
+
+    /* Use desktop background behind canvas to eliminate gray gap */
+    .win99-canvas-panel,
+    .win99-canvas-panel .win99-content,
+    .win99-canvas-area,
+    .win99-canvas-container {
+      background: var(--bg-desktop);
+    }
+  }
+
+  @media (max-width: 768px) {
+    /* Fix root and body to prevent mobile scrolling */
+    html, body {
+      height: 100vh;
+      height: 100dvh; /* use dynamic viewport height on mobile */
+      overflow: hidden;
+      position: fixed;
+      width: 100%;
+    }
+
+    #root {
+      height: 100vh;
+      height: 100dvh;
+      overflow: hidden;
+      position: fixed;
+      width: 100%;
+      top: 0;
+      left: 0;
+    }
+
+    .win99-app {
+      height: 100dvh;
+      overflow: hidden;
+    }
+
+    .win99-app-content {
+      height: calc(100dvh - 22px); /* subtract titlebar height */
+      overflow: hidden; /* no scrolling container */
+      position: relative;
+    }
+
+    /* Refine top toolbar buttons for mobile */
+    .win98-toolbar {
+      height: 52px;
+      padding: 2px 4px; /* add back some side padding */
+      gap: 2px; /* small gap for breathing room */
+      overflow-x: visible; /* show all buttons */
+      flex-wrap: nowrap;
+      justify-content: space-between; /* distribute evenly */
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .win98-toolbar-btn,
+    .win98-toolbar-btn-open {
+      flex: 1 1 0; /* equal flex basis for even distribution */
+      min-width: 0; /* allow buttons to shrink evenly */
+      height: 46px;
+      margin: 0;
+      padding: 2px 1px;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-shadow: inset -1px -1px var(--border-sunken), inset 1px 1px var(--border-raised);
+      border: 2px outset var(--border-window);
+    }
+
+    .win98-toolbar-btn-open {
+      background: var(--bg-button-hover);
+    }
+
+    .win98-toolbar-icon {
+      font-size: 16px;
+      margin: 0;
+    }
+
+    .win98-toolbar-text {
+      font-size: 7px;
+      margin-top: 2px;
+      line-height: 1;
+    }
+
+    .win98-toolbar-separator {
+      height: 40px;
+      margin: 0;
+      width: 1px;
+      flex-shrink: 0; /* don't shrink separators */
+      align-self: center;
+    }
+  }

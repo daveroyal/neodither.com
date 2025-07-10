@@ -55,6 +55,17 @@ A modern, Photoshop-like web application for applying stunning effects to images
 - **Zoom Controls**: Multiple zoom levels and fit-to-screen options
 - **Tool Panel**: Selection, move, crop, rotate, and drawing tools
 
+### 📱 Mobile Optimization
+
+- **Touch Support**: Full touch and gesture support for mobile devices
+- **Responsive Design**: Optimized interface for phones and tablets
+- **Mobile Navigation**: Bottom navigation bar with easy access to all features
+- **Touch Canvas**: Pinch-to-zoom, pan, and touch-based tool interactions
+- **Mobile Preview**: Large, full-width effect previews optimized for mobile screens
+- **Adaptive UI**: Interface elements automatically adapt to screen size
+- **No Scrollbars**: Clean, scroll-free mobile experience
+- **Smart Apply**: Apply effects and automatically return to canvas on mobile
+
 ## Getting Started
 
 ### Prerequisites
@@ -104,6 +115,28 @@ npm run dev
 - **Layer Visibility**: Toggle layers on/off
 - **Layer Locking**: Prevent accidental edits
 
+### Mobile Usage
+
+#### Touch Gestures
+- **Single Touch**: Pan around the canvas
+- **Pinch**: Zoom in/out on the canvas
+- **Double Tap**: Reset zoom to fit screen
+
+#### Mobile Navigation
+- **Edit**: Returns to the main canvas view
+- **Effects**: Access all image effects and parameters
+- **Layers**: Manage layers, opacity, and blend modes
+- **History**: View and restore previous edit states
+- **Save As**: Export your final image (disabled until image is loaded)
+
+#### Mobile Workflow
+1. Upload an image using the upload button in the toolbar
+2. Navigate to **Effects** to choose and configure effects
+3. Use the large preview to see your changes
+4. Click **Apply** to apply the effect and return to canvas
+5. Switch to **Layers** to manage multiple effects
+6. Use **Save As** to export your finished image
+
 ### Keyboard Shortcuts
 
 - `V` - Selection tool
@@ -136,25 +169,31 @@ npm run dev
 - **State Management**: React hooks for efficient state management
 - **Effect System**: Custom Canvas-based image filters and transformations
 - **Layer Compositing**: Advanced layer blending and compositing
+- **Responsive Design**: Mobile-first approach with adaptive layouts
+- **Touch API Integration**: Native touch and gesture event handling
+- **Progressive Enhancement**: Desktop features enhanced, mobile optimized
 
 ## Project Structure
 
 ```
 neo-dither/
 ├── components/          # React components
-│   ├── Canvas.tsx      # Main canvas component
+│   ├── Canvas.tsx      # Main canvas component with touch support
 │   ├── EffectsPanel.tsx # Effects selection and parameters
 │   ├── LayerPanel.tsx  # Layer management
 │   ├── HistoryPanel.tsx # Edit history
 │   ├── ToolPanel.tsx   # Drawing and editing tools
 │   ├── ExportDialog.tsx # Export functionality
+│   ├── MobileBottomNav.tsx # Mobile navigation bar
 │   └── Wallpaper.tsx   # Background wallpaper
 ├── src/
+│   ├── hooks/
+│   │   └── useIsMobile.ts # Mobile detection hook
 │   ├── utils/
 │   │   └── effects.ts  # All image processing effects
 │   ├── App.tsx         # Main application component
 │   ├── main.tsx        # Application entry point
-│   └── index.css       # Global styles
+│   └── index.css       # Global styles including mobile optimizations
 ├── public/             # Static assets
 └── package.json        # Dependencies and scripts
 ```

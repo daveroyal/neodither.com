@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
+import { useIsMobile } from "../src/hooks/useIsMobile";
 
 interface ToolPanelProps {
   currentTool: string;
@@ -27,17 +28,8 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
   showHistoryPopout,
   historyLength,
 }) => {
-  // Responsive mobile detection
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
-
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth <= 768);
-    };
-
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
+  // Responsive mobile detection using shared hook
+  const isMobile = useIsMobile();
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -180,22 +172,22 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
         </button>
       </div>
 
-      {/* Separator */}
-      <div className="win98-toolbar-separator"></div>
-
-      {/* History Group */}
-      <div className="win98-toolbar-group">
-        <button
-          className={`win98-toolbar-btn${showHistoryPopout ? " active" : ""}`}
-          onClick={onHistoryClick}
-          onMouseEnter={() =>
-            handleMouseEnter("History - View and manage edit history")
-          }
-          onMouseLeave={handleMouseLeave}
-          style={{
-            position: "relative",
-          }}
-        >
+      {/* Separator & History Group - Hidden on Mobile */}
+      {!isMobile && (
+        <>
+          <div className="win98-toolbar-separator"></div>
+          <div className="win98-toolbar-group">
+          <button
+            className={`win98-toolbar-btn${showHistoryPopout ? " active" : ""}`}
+            onClick={onHistoryClick}
+            onMouseEnter={() =>
+              handleMouseEnter("History - View and manage edit history")
+            }
+            onMouseLeave={handleMouseLeave}
+            style={{
+              position: "relative",
+            }}
+          >
           <span className="win98-toolbar-icon">📜</span>
           <span className="win98-toolbar-text">History</span>
           {(() => {
@@ -237,6 +229,8 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
           })()}
         </button>
       </div>
+        </>
+      )}
     </div>
   );
 };

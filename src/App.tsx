@@ -1,4 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
+import { useIsMobile } from "./hooks/useIsMobile";
+import { MobileBottomNav } from "../components/MobileBottomNav";
 import { ToolPanel } from "../components/ToolPanel";
 import { EffectsPanel } from "../components/EffectsPanel";
 import { HistoryPanel } from "../components/HistoryPanel";
@@ -38,6 +40,9 @@ function App() {
   const [isCompositing, setIsCompositing] = useState(false);
   const [zoom, setZoom] = useState<number>(100);
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false); // Default to light mode
+  // Mobile detection and view management
+  const isMobile = useIsMobile();
+  const [mobileView, setMobileView] = useState<"canvas" | "effects" | "layers" | "history">("canvas");
 
   // Preview mode state
   const [isPreviewMode, setIsPreviewMode] = useState(false);
@@ -784,7 +789,8 @@ function App() {
 
           {/* Main Content Area - three panels below toolbar */}
           <div className="win99-main-content">
-            {/* Left Sidebar - Effects (Main Panel) */}
+            {/* Left Sidebar - Effects (hidden on mobile) */}
+            {!isMobile && (
             <div className="win99-effects-sidebar">
               <div className="win99-window">
                 <div className="win99-titlebar">
@@ -849,6 +855,7 @@ function App() {
                 </div>
               </div>
             </div>
+            )}
 
             {/* Main Canvas Area */}
             <div className="win99-canvas-panel">
@@ -882,6 +889,7 @@ function App() {
             </div>
 
             {/* Right Sidebar - Layers */}
+            {!isMobile && (
             <div className="win99-layers-sidebar">
               <div className="win99-window">
                 <div className="win99-titlebar">
@@ -932,11 +940,74 @@ function App() {
                 </div>
               </div>
             </div>
+            )}
           </div>
         </div>
 
+        {/* Mobile Overlay Panels */}
+        {isMobile && mobileView !== "canvas" && (
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: "60px", // leave space for nav
+              background: "var(--bg-window)",
+              zIndex: 1050,
+              display: "flex",
+              flexDirection: "column",
+              border: "2px outset var(--border-window)",
+            }}
+          >
+            {/* Overlay title bar */}
+            <div className="win99-titlebar">
+              <div className="win99-titlebar-text" style={{ cursor: "pointer" }} onClick={() => setMobileView("canvas")}>⬅️ Back</div>
+            </div>
+            <div className="win99-content win99-scrollbar" style={{ flex: 1 }}>
+              {mobileView === "effects" && (
+                <EffectsPanel
+                  currentImage={isEditingLayer ? baseImage : compositeImage || baseImage}
+                  selectedLayer={selectedLayer}
+                  isEditingLayer={isEditingLayer}
+                  onImageChange={handleImageChange}
+                  isPreviewMode={isPreviewMode}
+                  onStartPreview={handleStartPreview}
+                  onUpdatePreview={handleUpdatePreview}
+                  onApplyPreview={handleApplyPreview}
+                  onCancelPreview={handleCancelPreview}
+                  onEditLayer={handleEditLayer}
+                  onNavigateToCanvas={isMobile ? () => setMobileView("canvas") : undefined}
+                />
+              )}
+
+              {mobileView === "layers" && (
+                <LayerPanel
+                  layers={layers}
+                  selectedLayerId={selectedLayerId}
+                  onLayerSelect={handleLayerSelect}
+                  onLayerUpdate={handleLayerUpdate}
+                  onLayerRemove={handleLayerRemove}
+                  onLayerReorder={handleLayerReorder}
+                  onClearLayers={handleClearLayers}
+                  onEditLayer={handleEditLayer}
+                />
+              )}
+
+              {mobileView === "history" && (
+                <HistoryPanel
+                  history={history}
+                  onHistoryItemSelect={handleHistoryItemSelect}
+                  onRemoveHistoryItem={handleRemoveHistoryItem}
+                  onClearHistory={handleClearHistory}
+                />
+              )}
+            </div>
+          </div>
+        )}
+
         {/* History Popout */}
-        {showHistoryPopout && (
+        {!isMobile && showHistoryPopout && (
           <div
             className="win99-history-popout"
             style={{
@@ -1044,6 +1115,16 @@ function App() {
         onClose={() => setShowExportDialog(false)}
         imageData={compositeImageData || ""}
         onExport={handleExport}
+      />
+
+      {/* Mobile Bottom Navigation */}
+      <MobileBottomNav
+        active={mobileView}
+        onChange={(view) => setMobileView(view)}
+        onExport={() => {
+          if (compositeImageData) setShowExportDialog(true);
+        }}
+        hasImage={!!compositeImageData}
       />
     </div>
   );
