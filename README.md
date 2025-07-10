@@ -2,6 +2,10 @@
 
 A modern, Photoshop-like web application for applying stunning effects to images. Built with React, TypeScript, and Canvas API, featuring a comprehensive suite of retro, gaming, and artistic effects.
 
+## 🚀 Check it out
+
+**[Live Demo](https://neodither-com.vercel.app/)** - Try the app online!
+
 ## Features
 
 ### 🎨 Effects Available
