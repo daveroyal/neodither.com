@@ -198,7 +198,7 @@
 
   /* Content Areas */
   .win99-content {
-    padding: 8px;
+    padding: 12px;
     background: var(--bg-content);
     overflow: hidden;
   }
@@ -621,7 +621,7 @@
     background: var(--bg-desktop);
     display: flex;
     flex-direction: column;
-    padding: 8px;
+    padding: 12px;
     gap: 4px;
   }
 
@@ -752,7 +752,6 @@
   .win99-canvas-panel {
     flex: 1;
     background: var(--bg-content);
-    border: 2px outset var(--border-window);
     box-shadow: inset -1px -1px var(--border-sunken),
       inset 1px 1px var(--border-raised);
     display: flex;
@@ -1525,7 +1524,7 @@ select:focus {
 
   .win99-main-content {
     position: absolute;
-    top: 74px; /* titlebar (22) + toolbar (52) */
+    top: 80px; /* titlebar (22) + toolbar (52) */
     left: 0;
     right: 0;
     bottom: 64px; /* bottom nav height */
@@ -1621,7 +1620,7 @@ select:focus {
     flex: 1;
     min-height: 200px;
     height: calc(100dvh - 74px - 64px - 10px); /* viewport - top - bottom - buffer */
-    max-height: calc(100dvh - 74px - 90px - 10px);
+    max-height: calc(100dvh - 74px - 106px - 10px);
     overflow: hidden;
     margin-bottom: 0;
   }
@@ -1798,7 +1797,6 @@ select:focus {
     flex-wrap: nowrap;
     align-items: center;
     background: var(--bg-content);
-    border-bottom: 1px solid var(--border-sunken);
     scrollbar-width: none;
     -ms-overflow-style: none;
   }
@@ -1964,10 +1962,8 @@ select:focus {
   display: flex;
   align-items: flex-end;
   background: var(--bg-content);
-  border: 2px outset var(--border-window);
   padding: 12px 12px 8px 8px;
   height: 68px;
-  box-shadow: 0 1px 0 var(--border-raised) inset;
   font-family: "MS Sans Serif", Tahoma, Geneva, Verdana, sans-serif;
   position: relative;
   z-index: 10;

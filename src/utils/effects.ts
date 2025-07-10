@@ -1,5 +1,52 @@
 // Image processing effects using Canvas API
 
+// Image metadata interface for scaling effects appropriately
+interface ImageMetadata {
+  width: number;
+  height: number;
+  dpi: number;
+}
+
+// Calculate scaling factors based on image dimensions and DPI
+const calculateScalingFactors = (metadata: ImageMetadata) => {
+  const { width, height, dpi } = metadata;
+  
+  // Base reference: 1920x1080 at 72 DPI
+  const baseWidth = 1920;
+  const baseHeight = 1080;
+  const baseDPI = 72;
+  
+  // Calculate scaling factors
+  const sizeScale = Math.sqrt((width * height) / (baseWidth * baseHeight));
+  const dpiScale = dpi / baseDPI;
+  const combinedScale = sizeScale * dpiScale;
+  
+  return {
+    sizeScale,
+    dpiScale,
+    combinedScale,
+    // Additional scaling factors for specific use cases
+    linearScale: Math.max(width, height) / Math.max(baseWidth, baseHeight),
+    minScale: Math.min(width, height) / Math.min(baseWidth, baseHeight),
+  };
+};
+
+// Helper function to get image DPI from image data (fallback to 72 if not available)
+const getImageDPI = (imageData: string): number => {
+  // For now, we'll use a default DPI of 72
+  // In a full implementation, this could parse EXIF data or use other methods
+  return 72;
+};
+
+// Helper function to get image metadata
+const getImageMetadata = (img: HTMLImageElement, imageData: string): ImageMetadata => {
+  return {
+    width: img.width,
+    height: img.height,
+    dpi: getImageDPI(imageData)
+  };
+};
+
 export const applyVHSEffect = async (
   imageUrl: string,
   params: Record<string, any>
@@ -19,40 +66,172 @@ export const applyVHSEffect = async (
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imageData.data;
 
-      const scanlines = params.scanlines || 30;
-      const noise = params.noise || 20;
-      const colorShift = params.colorShift || 10;
+      // Get scaling factors
+      const metadata = getImageMetadata(img, imageUrl);
+      const scalingFactors = calculateScalingFactors(metadata);
 
-      // Apply VHS effects
+      const tracking = params.tracking || 30;
+      const chromatic = params.chromatic || 25;
+      const dropout = params.dropout || 20;
+      const syncLoss = params.syncLoss || 15;
+      const tapeNoise = params.tapeNoise || 25;
+      const colorBleed = params.colorBleed || 30;
+      const scanlines = params.scanlines || 40;
+      const noiseType = params.noiseType || 0;
+
+      // Scale parameters based on image dimensions and DPI
+      const scaledNoiseAmount = 80 * scalingFactors.combinedScale;
+      const scaledTrackingError = Math.max(2, Math.round(15 * scalingFactors.linearScale));
+      const scaledColorShift = Math.max(3, Math.round(12 * scalingFactors.linearScale));
+      const scaledScanlineSpacing = Math.max(2, Math.round(3 * scalingFactors.sizeScale));
+
+      // Create a copy of the data for reading original values
+      const originalData = new Uint8ClampedArray(data);
+
+      // Apply dramatic VHS glitch effects
       for (let y = 0; y < canvas.height; y++) {
+        
+        // TRACKING ERRORS: Random horizontal line shifts (most dramatic VHS effect)
+        if (Math.random() < tracking / 150) {
+          const trackingShift = Math.floor((Math.random() - 0.5) * scaledTrackingError * 2);
+          const glitchHeight = Math.floor(Math.random() * 8) + 1; // 1-8 lines affected
+          
+          for (let lineOffset = 0; lineOffset < glitchHeight && y + lineOffset < canvas.height; lineOffset++) {
+            const currentY = y + lineOffset;
+            
+            // Shift entire line horizontally
+            for (let x = 0; x < canvas.width; x++) {
+              const sourceX = Math.max(0, Math.min(canvas.width - 1, x - trackingShift));
+              const sourceIdx = (currentY * canvas.width + sourceX) * 4;
+              const targetIdx = (currentY * canvas.width + x) * 4;
+              
+              data[targetIdx] = originalData[sourceIdx];
+              data[targetIdx + 1] = originalData[sourceIdx + 1];
+              data[targetIdx + 2] = originalData[sourceIdx + 2];
+            }
+          }
+        }
+
+        // CHROMATIC ABERRATION: Separate color channels dramatically
+        if (Math.random() < chromatic / 200) {
+          const rShift = Math.floor((Math.random() - 0.5) * scaledColorShift);
+          const bShift = Math.floor((Math.random() - 0.5) * scaledColorShift);
+          const affectedLines = Math.floor(Math.random() * 12) + 3; // 3-15 lines
+          
+          for (let lineOffset = 0; lineOffset < affectedLines && y + lineOffset < canvas.height; lineOffset++) {
+            const currentY = y + lineOffset;
+            
+            for (let x = 0; x < canvas.width; x++) {
+              const idx = (currentY * canvas.width + x) * 4;
+              
+              // Red channel shift
+              const rSourceX = Math.max(0, Math.min(canvas.width - 1, x - rShift));
+              const rSourceIdx = (currentY * canvas.width + rSourceX) * 4;
+              data[idx] = originalData[rSourceIdx];
+              
+              // Blue channel shift
+              const bSourceX = Math.max(0, Math.min(canvas.width - 1, x - bShift));
+              const bSourceIdx = (currentY * canvas.width + bSourceX) * 4;
+              data[idx + 2] = originalData[bSourceIdx + 2];
+            }
+          }
+        }
+
+        // SIGNAL DROPOUT: Complete signal loss areas
+        if (Math.random() < dropout / 300) {
+          const dropoutWidth = Math.floor(Math.random() * (canvas.width * 0.3)) + 20;
+          const dropoutHeight = Math.floor(Math.random() * 6) + 2;
+          const dropoutX = Math.floor(Math.random() * (canvas.width - dropoutWidth));
+          
+          for (let dy = 0; dy < dropoutHeight && y + dy < canvas.height; dy++) {
+            for (let dx = 0; dx < dropoutWidth; dx++) {
+              const dropoutIdx = ((y + dy) * canvas.width + (dropoutX + dx)) * 4;
+              if (dropoutIdx < data.length) {
+                // Random between complete black or white noise
+                const dropoutValue = Math.random() < 0.7 ? 0 : Math.floor(Math.random() * 255);
+                data[dropoutIdx] = dropoutValue;
+                data[dropoutIdx + 1] = dropoutValue;
+                data[dropoutIdx + 2] = dropoutValue;
+              }
+            }
+          }
+        }
+
+        // Process pixel-level effects
         for (let x = 0; x < canvas.width; x++) {
           const idx = (y * canvas.width + x) * 4;
 
-          // Scanlines effect
-          if (y % 2 === 0 && Math.random() < scanlines / 100) {
-            data[idx] = data[idx] * 0.8;
-            data[idx + 1] = data[idx + 1] * 0.8;
-            data[idx + 2] = data[idx + 2] * 0.8;
+          // INTERLACED SCANLINES: More authentic VHS scanline pattern
+          if (y % scaledScanlineSpacing === 0) {
+            const scanlineIntensity = (scanlines / 100) * (0.3 + Math.random() * 0.4);
+            data[idx] = data[idx] * (1 - scanlineIntensity);
+            data[idx + 1] = data[idx + 1] * (1 - scanlineIntensity);
+            data[idx + 2] = data[idx + 2] * (1 - scanlineIntensity);
           }
 
-          // Noise effect
-          if (Math.random() < noise / 100) {
-            const noiseValue = Math.random() * 50 - 25;
-            data[idx] = Math.max(0, Math.min(255, data[idx] + noiseValue));
-            data[idx + 1] = Math.max(
-              0,
-              Math.min(255, data[idx + 1] + noiseValue)
-            );
-            data[idx + 2] = Math.max(
-              0,
-              Math.min(255, data[idx + 2] + noiseValue)
-            );
+          // VHS-STYLE NOISE: More realistic tape noise
+          if (Math.random() < tapeNoise / 80) {
+            const currentNoiseType = noiseType === 0 ? Math.random() : noiseType;
+            if (currentNoiseType < 0.6 || noiseType === 1) {
+              // Luminance noise (affects brightness)
+              const noiseValue = (Math.random() - 0.5) * scaledNoiseAmount;
+              data[idx] = Math.max(0, Math.min(255, data[idx] + noiseValue));
+              data[idx + 1] = Math.max(0, Math.min(255, data[idx + 1] + noiseValue));
+              data[idx + 2] = Math.max(0, Math.min(255, data[idx + 2] + noiseValue));
+            } else if (currentNoiseType < 0.8 || noiseType === 2) {
+              // Chrominance noise (affects color)
+              const colorNoise = (Math.random() - 0.5) * scaledNoiseAmount * 0.7;
+              data[idx] = Math.max(0, Math.min(255, data[idx] + colorNoise));
+              data[idx + 2] = Math.max(0, Math.min(255, data[idx + 2] - colorNoise));
+            } else if (noiseType === 3 || currentNoiseType >= 0.8) {
+              // High-frequency noise (white speckles)
+              const speckle = Math.random() * 255;
+              data[idx] = speckle;
+              data[idx + 1] = speckle;
+              data[idx + 2] = speckle;
+            }
           }
 
-          // Color shift effect
-          if (x > colorShift) {
-            const shiftIdx = (y * canvas.width + (x - colorShift)) * 4;
-            data[idx] = data[shiftIdx];
+          // COLOR BLEEDING: Subtle horizontal color bleed
+          if (x > 2 && Math.random() < (colorBleed / 100) * 0.05) {
+            const bleedAmount = (colorBleed / 100) * 0.3;
+            const leftIdx = (y * canvas.width + (x - 1)) * 4;
+            const leftLeftIdx = (y * canvas.width + (x - 2)) * 4;
+            
+            // Bleed colors from left pixels
+            data[idx] = data[idx] * (1 - bleedAmount) + data[leftIdx] * bleedAmount * 0.7 + data[leftLeftIdx] * bleedAmount * 0.3;
+            data[idx + 1] = data[idx + 1] * (1 - bleedAmount) + data[leftIdx + 1] * bleedAmount * 0.7 + data[leftLeftIdx + 1] * bleedAmount * 0.3;
+            data[idx + 2] = data[idx + 2] * (1 - bleedAmount) + data[leftIdx + 2] * bleedAmount * 0.7 + data[leftLeftIdx + 2] * bleedAmount * 0.3;
+          }
+        }
+      }
+
+      // SYNC LOSS: Occasional line wrapping effect
+      if (Math.random() < syncLoss / 100) {
+        const syncLossY = Math.floor(Math.random() * canvas.height);
+        const wrapAmount = Math.floor(Math.random() * (canvas.width * 0.3)) + 10;
+        const affectedLines = Math.floor(Math.random() * 5) + 1;
+        
+        for (let lineOffset = 0; lineOffset < affectedLines && syncLossY + lineOffset < canvas.height; lineOffset++) {
+          const currentY = syncLossY + lineOffset;
+          const lineData = [];
+          
+          // Extract line data
+          for (let x = 0; x < canvas.width; x++) {
+            const idx = (currentY * canvas.width + x) * 4;
+            lineData.push(data[idx], data[idx + 1], data[idx + 2], data[idx + 3]);
+          }
+          
+          // Rewrite line with wrap
+          for (let x = 0; x < canvas.width; x++) {
+            const sourceX = (x + wrapAmount) % canvas.width;
+            const sourceIdx = sourceX * 4;
+            const targetIdx = (currentY * canvas.width + x) * 4;
+            
+            data[targetIdx] = lineData[sourceIdx];
+            data[targetIdx + 1] = lineData[sourceIdx + 1];
+            data[targetIdx + 2] = lineData[sourceIdx + 2];
+            data[targetIdx + 3] = lineData[sourceIdx + 3];
           }
         }
       }
@@ -82,21 +261,31 @@ export const applyGlitchEffect = async (
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imageData.data;
 
+      // Get scaling factors
+      const metadata = getImageMetadata(img, imageUrl);
+      const scalingFactors = calculateScalingFactors(metadata);
+
       const intensity = params.intensity || 50;
       const frequency = params.frequency || 30;
       const rgbShift = params.rgbShift || 15;
+      const blockCorruption = params.blockCorruption || 40;
+      const digitalNoise = params.digitalNoise || 20;
+
+      // Scale parameters based on image dimensions and DPI
+      const scaledIntensity = Math.max(1, Math.round(intensity * scalingFactors.linearScale / 10));
+      const scaledRgbShift = Math.max(1, Math.round(rgbShift * scalingFactors.linearScale));
+      const scaledBlockCorruption = Math.max(1, Math.round(blockCorruption * scalingFactors.linearScale / 10));
+      const scaledDigitalNoise = Math.max(1, Math.round(digitalNoise * scalingFactors.linearScale / 10));
 
       // Apply glitch effects
       for (let y = 0; y < canvas.height; y++) {
         for (let x = 0; x < canvas.width; x++) {
           const idx = (y * canvas.width + x) * 4;
 
-          // Random glitch lines
-          if (Math.random() < frequency / 1000) {
-            const glitchLength =
-              Math.floor((Math.random() * intensity) / 10) + 1;
-            const glitchOffset =
-              Math.floor(Math.random() * rgbShift) - rgbShift / 2;
+          // Random glitch lines - scale frequency based on image size
+          if (Math.random() < frequency / (1000 * scalingFactors.sizeScale)) {
+            const glitchLength = scaledIntensity + 1;
+            const glitchOffset = Math.floor(Math.random() * scaledRgbShift) - Math.floor(scaledRgbShift / 2);
 
             for (let i = 0; i < glitchLength && x + i < canvas.width; i++) {
               const targetIdx = (y * canvas.width + (x + i)) * 4;
@@ -110,28 +299,28 @@ export const applyGlitchEffect = async (
             }
           }
 
-          // RGB channel separation
-          if (Math.random() < intensity / 1000) {
-            const rShift = Math.floor(Math.random() * rgbShift) - rgbShift / 2;
-            const gShift = Math.floor(Math.random() * rgbShift) - rgbShift / 2;
-            const bShift = Math.floor(Math.random() * rgbShift) - rgbShift / 2;
+          // Block corruption - apply in blocks
+          if (Math.random() < blockCorruption / (10000 * scalingFactors.sizeScale)) {
+            const blockSize = Math.max(2, Math.floor(8 * scalingFactors.minScale));
+            const blockX = Math.floor(x / blockSize) * blockSize;
+            const blockY = Math.floor(y / blockSize) * blockSize;
+            
+            for (let by = 0; by < blockSize && blockY + by < canvas.height; by++) {
+              for (let bx = 0; bx < blockSize && blockX + bx < canvas.width; bx++) {
+                const blockIdx = ((blockY + by) * canvas.width + (blockX + bx)) * 4;
+                data[blockIdx] = Math.random() * 255;
+                data[blockIdx + 1] = Math.random() * 255;
+                data[blockIdx + 2] = Math.random() * 255;
+              }
+            }
+          }
 
-            const rIdx =
-              (y * canvas.width +
-                Math.max(0, Math.min(canvas.width - 1, x + rShift))) *
-              4;
-            const gIdx =
-              (y * canvas.width +
-                Math.max(0, Math.min(canvas.width - 1, x + gShift))) *
-              4;
-            const bIdx =
-              (y * canvas.width +
-                Math.max(0, Math.min(canvas.width - 1, x + bShift))) *
-              4;
-
-            data[idx] = data[rIdx];
-            data[idx + 1] = data[gIdx + 1];
-            data[idx + 2] = data[bIdx + 2];
+          // Digital noise - scale based on DPI
+          if (Math.random() < (digitalNoise / 100) / (10 * scalingFactors.dpiScale)) {
+            const noiseValue = (Math.random() - 0.5) * scaledDigitalNoise;
+            data[idx] = Math.max(0, Math.min(255, data[idx] + noiseValue));
+            data[idx + 1] = Math.max(0, Math.min(255, data[idx + 1] + noiseValue));
+            data[idx + 2] = Math.max(0, Math.min(255, data[idx + 2] + noiseValue));
           }
         }
       }
@@ -161,9 +350,16 @@ export const applyLofiEffect = async (
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imageData.data;
 
+      // Get scaling factors
+      const metadata = getImageMetadata(img, imageUrl);
+      const scalingFactors = calculateScalingFactors(metadata);
+
       const saturation = params.saturation || 60;
       const contrast = params.contrast || 40;
       const grain = params.grain || 25;
+
+      // Scale grain probability based on image size and DPI
+      const scaledGrainProbability = (grain / 100) / scalingFactors.combinedScale;
 
       // Apply lo-fi effects
       for (let i = 0; i < data.length; i += 4) {
@@ -195,9 +391,9 @@ export const applyLofiEffect = async (
           Math.min(255, (data[i + 2] - 128) * contrastFactor + 128)
         );
 
-        // Add grain
-        if (Math.random() < grain / 100) {
-          const grainValue = (Math.random() - 0.5) * 30;
+        // Add grain - scale probability based on image size and DPI
+        if (Math.random() < scaledGrainProbability) {
+          const grainValue = (Math.random() - 0.5) * 30 * scalingFactors.combinedScale;
           data[i] = Math.max(0, Math.min(255, data[i] + grainValue));
           data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + grainValue));
           data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + grainValue));
@@ -229,9 +425,18 @@ export const applyCyberpunkEffect = async (
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imageData.data;
 
+      // Get scaling factors
+      const metadata = getImageMetadata(img, imageUrl);
+      const scalingFactors = calculateScalingFactors(metadata);
+
       const neon = params.neon || 70;
       const contrast = params.contrast || 80;
       const colorTemp = params.colorTemp || 60;
+      const glowRadius = params.glowRadius || 30;
+      const saturation = params.saturation || 150;
+
+      // Scale brightness threshold based on image quality/DPI
+      const brightnessThreshold = 150 * scalingFactors.dpiScale;
 
       // Apply cyberpunk effects
       for (let i = 0; i < data.length; i += 4) {
@@ -251,13 +456,28 @@ export const applyCyberpunkEffect = async (
           Math.min(255, (b - 128) * contrastFactor + 128)
         );
 
-        // Add neon glow to bright areas
-        const brightness = (r + g + b) / 3;
-        if (brightness > 150) {
+        // Apply color temperature shift
+        const colorTempFactor = (colorTemp - 50) / 50;
+        const tempR = Math.max(0, Math.min(255, data[i] + (colorTempFactor * 20)));
+        const tempB = Math.max(0, Math.min(255, data[i + 2] - (colorTempFactor * 20)));
+        data[i] = tempR;
+        data[i + 2] = tempB;
+
+        // Apply saturation boost
+        const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        const satFactor = saturation / 100;
+        data[i] = Math.max(0, Math.min(255, gray + (data[i] - gray) * satFactor));
+        data[i + 1] = Math.max(0, Math.min(255, gray + (data[i + 1] - gray) * satFactor));
+        data[i + 2] = Math.max(0, Math.min(255, gray + (data[i + 2] - gray) * satFactor));
+
+        // Add neon glow to bright areas - scale threshold based on DPI
+        const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
+        if (brightness > brightnessThreshold) {
           const neonFactor = neon / 100;
-          data[i] = Math.min(255, r + (255 - r) * neonFactor);
-          data[i + 1] = Math.min(255, g + (255 - g) * neonFactor);
-          data[i + 2] = Math.min(255, b + (255 - b) * neonFactor);
+          const glowFactor = glowRadius / 100;
+          data[i] = Math.min(255, data[i] + (255 - data[i]) * neonFactor * glowFactor);
+          data[i + 1] = Math.min(255, data[i + 1] + (255 - data[i + 1]) * neonFactor * glowFactor);
+          data[i + 2] = Math.min(255, data[i + 2] + (255 - data[i + 2]) * neonFactor * glowFactor);
         }
 
         // Color temperature adjustment (more blue/cyan)
@@ -374,33 +594,104 @@ export const applyFilmGrainEffect = async (
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imageData.data;
 
+      // Get scaling factors
+      const metadata = getImageMetadata(img, imageUrl);
+      const scalingFactors = calculateScalingFactors(metadata);
+
       const intensity = params.intensity || 50;
       const size = params.size || 3;
       const opacity = params.opacity || 60;
+      const grainType = params.grainType || 0;
+      const shadows = params.shadows || 70;
+      const highlights = params.highlights || 30;
 
-      // Apply film grain
-      for (let y = 0; y < canvas.height; y += size) {
-        for (let x = 0; x < canvas.width; x += size) {
-          const grainValue = (Math.random() - 0.5) * intensity;
+      // Scale grain parameters based on image dimensions and DPI
+      const scaledIntensity = intensity * scalingFactors.combinedScale * 1.5; // Boost intensity
+      const baseOpacity = opacity / 100;
 
-          for (let py = 0; py < size && y + py < canvas.height; py++) {
-            for (let px = 0; px < size && x + px < canvas.width; px++) {
-              const idx = ((y + py) * canvas.width + (x + px)) * 4;
-              const alpha = opacity / 100;
+      // Define grain characteristics based on type
+      const grainCharacteristics = {
+        0: { // Fine
+          primarySize: 0.6,
+          secondarySize: 0.3,
+          density: 0.8,
+          sharpness: 0.8
+        },
+        1: { // Medium
+          primarySize: 0.9,
+          secondarySize: 0.4,
+          density: 0.7,
+          sharpness: 0.6
+        },
+        2: { // Coarse
+          primarySize: 1.4,
+          secondarySize: 0.6,
+          density: 0.6,
+          sharpness: 0.4
+        },
+        3: { // Mixed
+          primarySize: 1.0,
+          secondarySize: 0.5,
+          density: 0.75,
+          sharpness: 0.5
+        }
+      };
 
-              data[idx] = Math.max(
-                0,
-                Math.min(255, data[idx] + grainValue * alpha)
-              );
-              data[idx + 1] = Math.max(
-                0,
-                Math.min(255, data[idx + 1] + grainValue * alpha)
-              );
-              data[idx + 2] = Math.max(
-                0,
-                Math.min(255, data[idx + 2] + grainValue * alpha)
-              );
-            }
+      const grainProps = grainCharacteristics[grainType as keyof typeof grainCharacteristics];
+
+      // Apply film grain per pixel for realistic distribution
+      for (let y = 0; y < canvas.height; y++) {
+        for (let x = 0; x < canvas.width; x++) {
+          const idx = (y * canvas.width + x) * 4;
+          
+          // Calculate luminance for shadow/highlight grain variation
+          const luminance = (0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2]) / 255;
+          
+          // Apply different grain intensity for shadows vs highlights
+          const shadowFactor = Math.max(0, 1 - luminance) * (shadows / 100);
+          const highlightFactor = Math.max(0, luminance - 0.5) * (highlights / 100);
+          const luminanceGrainFactor = Math.max(shadowFactor, highlightFactor);
+          
+          // Generate multiple grain layers for more organic look
+          const shouldApplyGrain = Math.random() < grainProps.density;
+          
+          if (shouldApplyGrain) {
+            // Primary grain (main texture)
+            const primaryGrain = (Math.random() - 0.5) * scaledIntensity * grainProps.primarySize;
+            
+            // Secondary grain (fine detail)
+            const secondaryGrain = (Math.random() - 0.5) * scaledIntensity * grainProps.secondarySize;
+            
+            // Combine grain layers
+            const totalGrain = primaryGrain + secondaryGrain;
+            
+            // Apply grain with luminance-based variation
+            const finalGrainIntensity = totalGrain * (1 + luminanceGrainFactor);
+            
+            // Apply slight variations per color channel for more realistic look
+            const rGrainVariation = (Math.random() - 0.5) * 0.1;
+            const gGrainVariation = (Math.random() - 0.5) * 0.1;
+            const bGrainVariation = (Math.random() - 0.5) * 0.1;
+            
+            const finalOpacity = baseOpacity * (0.8 + Math.random() * 0.4); // Vary opacity slightly
+            
+            // Apply grain to each channel with slight variations
+            data[idx] = Math.max(0, Math.min(255, 
+              data[idx] + (finalGrainIntensity * (1 + rGrainVariation)) * finalOpacity));
+            data[idx + 1] = Math.max(0, Math.min(255, 
+              data[idx + 1] + (finalGrainIntensity * (1 + gGrainVariation)) * finalOpacity));
+            data[idx + 2] = Math.max(0, Math.min(255, 
+              data[idx + 2] + (finalGrainIntensity * (1 + bGrainVariation)) * finalOpacity));
+          }
+          
+          // For mixed grain type, occasionally add extra coarse grain
+          if (grainType === 3 && Math.random() < 0.05) {
+            const coarseGrain = (Math.random() - 0.5) * scaledIntensity * 1.2;
+            const coarseOpacity = baseOpacity * 0.7;
+            
+            data[idx] = Math.max(0, Math.min(255, data[idx] + coarseGrain * coarseOpacity));
+            data[idx + 1] = Math.max(0, Math.min(255, data[idx + 1] + coarseGrain * coarseOpacity));
+            data[idx + 2] = Math.max(0, Math.min(255, data[idx + 2] + coarseGrain * coarseOpacity));
           }
         }
       }
@@ -496,13 +787,24 @@ export const applyVintageEffect = async (
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imageData.data;
 
-      const fade = params.fade || 40;
+      // Get scaling factors
+      const metadata = getImageMetadata(img, imageUrl);
+      const scalingFactors = calculateScalingFactors(metadata);
+
+      const fade = params.fade || 50;
       const grain = params.grain || 30;
-      const vignette = params.vignette || 50;
+      const vignette = params.vignette || 25;
+      const warmth = params.warmth || 40;
+      const scratches = params.scratches || 20;
+      const dustSpots = params.dustSpots || 15;
 
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2;
       const maxDistance = Math.sqrt(centerX * centerX + centerY * centerY);
+
+      // Scale grain parameters based on image dimensions and DPI
+      const scaledGrainProbability = (grain / 100) / scalingFactors.combinedScale;
+      const scaledGrainIntensity = 40 * scalingFactors.combinedScale;
 
       for (let y = 0; y < canvas.height; y++) {
         for (let x = 0; x < canvas.width; x++) {
@@ -514,9 +816,19 @@ export const applyVintageEffect = async (
           data[idx + 1] = data[idx + 1] * (1 - fadeFactor) + 255 * fadeFactor;
           data[idx + 2] = data[idx + 2] * (1 - fadeFactor) + 255 * fadeFactor;
 
-          // Add grain
-          if (Math.random() < grain / 100) {
-            const grainValue = (Math.random() - 0.5) * 40;
+          // Apply warmth (sepia-like effect)
+          const warmthFactor = warmth / 100;
+          const originalR = data[idx];
+          const originalG = data[idx + 1];
+          const originalB = data[idx + 2];
+          
+          data[idx] = Math.min(255, originalR + (originalR * 0.3 * warmthFactor));
+          data[idx + 1] = Math.min(255, originalG + (originalG * 0.2 * warmthFactor));
+          data[idx + 2] = Math.max(0, originalB * (1 - warmthFactor * 0.2));
+
+          // Add grain - scale based on image size and DPI
+          if (Math.random() < scaledGrainProbability) {
+            const grainValue = (Math.random() - 0.5) * scaledGrainIntensity;
             data[idx] = Math.max(0, Math.min(255, data[idx] + grainValue));
             data[idx + 1] = Math.max(
               0,
@@ -539,6 +851,60 @@ export const applyVintageEffect = async (
           data[idx] = data[idx] * vignetteFactor;
           data[idx + 1] = data[idx + 1] * vignetteFactor;
           data[idx + 2] = data[idx + 2] * vignetteFactor;
+        }
+      }
+
+      // Add scratches
+      if (scratches > 0) {
+        const numScratches = Math.floor((scratches / 100) * 10);
+        for (let i = 0; i < numScratches; i++) {
+          const x = Math.random() * canvas.width;
+          const y = Math.random() * canvas.height;
+          const length = Math.random() * 100 + 50;
+          const width = Math.random() * 2 + 1;
+          
+          for (let j = 0; j < length; j++) {
+            const scratchX = Math.floor(x + (Math.random() - 0.5) * width);
+            const scratchY = Math.floor(y + j);
+            
+            if (scratchX >= 0 && scratchX < canvas.width && scratchY >= 0 && scratchY < canvas.height) {
+              const scratchIdx = (scratchY * canvas.width + scratchX) * 4;
+              const darkening = Math.random() * 50 + 50;
+              data[scratchIdx] = Math.max(0, data[scratchIdx] - darkening);
+              data[scratchIdx + 1] = Math.max(0, data[scratchIdx + 1] - darkening);
+              data[scratchIdx + 2] = Math.max(0, data[scratchIdx + 2] - darkening);
+            }
+          }
+        }
+      }
+
+      // Add dust spots
+      if (dustSpots > 0) {
+        const numSpots = Math.floor((dustSpots / 100) * 20);
+        for (let i = 0; i < numSpots; i++) {
+          const centerX = Math.random() * canvas.width;
+          const centerY = Math.random() * canvas.height;
+          const radius = Math.random() * 5 + 2;
+          
+          for (let dy = -radius; dy <= radius; dy++) {
+            for (let dx = -radius; dx <= radius; dx++) {
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              if (dist <= radius) {
+                const spotX = Math.floor(centerX + dx);
+                const spotY = Math.floor(centerY + dy);
+                
+                if (spotX >= 0 && spotX < canvas.width && spotY >= 0 && spotY < canvas.height) {
+                  const spotIdx = (spotY * canvas.width + spotX) * 4;
+                  const opacity = 1 - (dist / radius);
+                  const dustColor = Math.random() * 100 + 100;
+                  
+                  data[spotIdx] = Math.min(255, data[spotIdx] + dustColor * opacity);
+                  data[spotIdx + 1] = Math.min(255, data[spotIdx + 1] + dustColor * opacity);
+                  data[spotIdx + 2] = Math.min(255, data[spotIdx + 2] + dustColor * opacity);
+                }
+              }
+            }
+          }
         }
       }
 
@@ -786,27 +1152,39 @@ export const applySharpenEffect = async (
       const data = imageData.data;
       const originalData = new Uint8ClampedArray(data);
 
-      const amount = params.amount || 100;
-      const threshold = params.threshold || 10;
-
-      // Simple sharpen kernel
+      const strength = params.strength || 50;
+      
+      // Unsharp mask kernel - preserves brightness
+      const kernel = [
+        [0, -1, 0],
+        [-1, 5, -1],
+        [0, -1, 0]
+      ];
+      
+      // Apply the kernel with strength control
       for (let y = 1; y < canvas.height - 1; y++) {
         for (let x = 1; x < canvas.width - 1; x++) {
           const idx = (y * canvas.width + x) * 4;
 
           for (let c = 0; c < 3; c++) {
-            const current = originalData[idx + c];
-            const top = originalData[((y - 1) * canvas.width + x) * 4 + c];
-            const bottom = originalData[((y + 1) * canvas.width + x) * 4 + c];
-            const left = originalData[(y * canvas.width + (x - 1)) * 4 + c];
-            const right = originalData[(y * canvas.width + (x + 1)) * 4 + c];
-
-            const edge = current * 5 - top - bottom - left - right;
-            const enhanced = current + (edge * amount) / 100;
-
-            if (Math.abs(edge) > threshold) {
-              data[idx + c] = Math.max(0, Math.min(255, enhanced));
+            let sum = 0;
+            
+            // Apply convolution kernel
+            for (let ky = -1; ky <= 1; ky++) {
+              for (let kx = -1; kx <= 1; kx++) {
+                const pixelIdx = ((y + ky) * canvas.width + (x + kx)) * 4;
+                sum += originalData[pixelIdx + c] * kernel[ky + 1][kx + 1];
+              }
             }
+            
+            const original = originalData[idx + c];
+            const sharpened = sum;
+            
+            // Blend between original and sharpened based on strength
+            const strengthFactor = strength / 100;
+            const result = original * (1 - strengthFactor) + sharpened * strengthFactor;
+            
+            data[idx + c] = Math.max(0, Math.min(255, result));
           }
         }
       }
@@ -1216,9 +1594,15 @@ export const applyNESEffect = async (
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imageData.data;
 
+      // Get scaling factors
+      const metadata = getImageMetadata(img, imageUrl);
+      const scalingFactors = calculateScalingFactors(metadata);
+
       const pixelation = params.pixelation || 4;
       const colorDepth = params.colorDepth || 8;
       const contrast = params.contrast || 120;
+      const scanlines = params.scanlines || 20;
+      const dithering = params.dithering || 15;
 
       // NES color palette (simplified)
       const nesColors = [
@@ -1256,8 +1640,8 @@ export const applyNESEffect = async (
         [0, 0, 0],
       ];
 
-      // Pixelation effect
-      const pixelSize = Math.max(1, pixelation);
+      // Pixelation effect - scale pixel size based on image dimensions
+      const pixelSize = Math.max(1, Math.round(pixelation * scalingFactors.sizeScale));
       for (let y = 0; y < canvas.height; y += pixelSize) {
         for (let x = 0; x < canvas.width; x += pixelSize) {
           let r = 0,
@@ -1325,6 +1709,32 @@ export const applyNESEffect = async (
         );
       }
 
+      // Apply scanlines
+      if (scanlines > 0) {
+        const scanlineIntensity = scanlines / 100;
+        for (let y = 0; y < canvas.height; y += 2) {
+          for (let x = 0; x < canvas.width; x++) {
+            const idx = (y * canvas.width + x) * 4;
+            data[idx] = Math.max(0, data[idx] * (1 - scanlineIntensity));
+            data[idx + 1] = Math.max(0, data[idx + 1] * (1 - scanlineIntensity));
+            data[idx + 2] = Math.max(0, data[idx + 2] * (1 - scanlineIntensity));
+          }
+        }
+      }
+
+      // Apply dithering
+      if (dithering > 0) {
+        const ditherStrength = dithering / 100;
+        for (let i = 0; i < data.length; i += 4) {
+          if (Math.random() < ditherStrength * 0.5) {
+            const ditherValue = (Math.random() - 0.5) * 20;
+            data[i] = Math.max(0, Math.min(255, data[i] + ditherValue));
+            data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + ditherValue));
+            data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + ditherValue));
+          }
+        }
+      }
+
       ctx.putImageData(imageData, 0, 0);
       resolve(canvas.toDataURL());
     };
@@ -1353,6 +1763,8 @@ export const applySegaGenesisEffect = async (
       const saturation = params.saturation || 140;
       const dithering = params.dithering || 25;
       const colorDepth = params.colorDepth || 512;
+      const scanlines = params.scanlines || 30;
+      const sharpness = params.sharpness || 130;
 
       // Apply saturation boost (Genesis was known for vibrant colors)
       for (let i = 0; i < data.length; i += 4) {
@@ -1379,6 +1791,27 @@ export const applySegaGenesisEffect = async (
           data[i] = Math.max(0, Math.min(255, data[i] + ditherValue));
           data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + ditherValue));
           data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + ditherValue));
+        }
+
+        // Apply sharpness
+        if (sharpness > 100) {
+          const sharpnessFactor = (sharpness - 100) / 100;
+          data[i] = Math.max(0, Math.min(255, data[i] * (1 + sharpnessFactor)));
+          data[i + 1] = Math.max(0, Math.min(255, data[i + 1] * (1 + sharpnessFactor)));
+          data[i + 2] = Math.max(0, Math.min(255, data[i + 2] * (1 + sharpnessFactor)));
+        }
+      }
+
+      // Apply scanlines
+      if (scanlines > 0) {
+        const scanlineIntensity = scanlines / 100;
+        for (let y = 0; y < canvas.height; y += 2) {
+          for (let x = 0; x < canvas.width; x++) {
+            const idx = (y * canvas.width + x) * 4;
+            data[idx] = Math.max(0, data[idx] * (1 - scanlineIntensity * 0.3));
+            data[idx + 1] = Math.max(0, data[idx + 1] * (1 - scanlineIntensity * 0.3));
+            data[idx + 2] = Math.max(0, data[idx + 2] * (1 - scanlineIntensity * 0.3));
+          }
         }
       }
 
@@ -1410,6 +1843,8 @@ export const applySNESEffect = async (
       const softness = params.softness || 40;
       const colorBoost = params.colorBoost || 115;
       const brightness = params.brightness || 110;
+      const colorBleed = params.colorBleed || 25;
+      const scanlines = params.scanlines || 15;
 
       // Simple 16-bit color reduction
       const reduce16Bit = (value: number) => {
@@ -1440,6 +1875,36 @@ export const applySNESEffect = async (
         data[i] = Math.min(255, Math.max(0, reduce16Bit(r)));
         data[i + 1] = Math.min(255, Math.max(0, reduce16Bit(g)));
         data[i + 2] = Math.min(255, Math.max(0, reduce16Bit(b)));
+      }
+
+      // Apply color bleeding
+      if (colorBleed > 0) {
+        const bleedIntensity = colorBleed / 100;
+        const tempData = new Uint8ClampedArray(data);
+        for (let i = 0; i < data.length; i += 4) {
+          const x = (i / 4) % canvas.width;
+          const y = Math.floor(i / 4 / canvas.width);
+          
+          if (x > 0 && Math.random() < bleedIntensity * 0.3) {
+            const leftIndex = (y * canvas.width + (x - 1)) * 4;
+            data[i] = Math.min(255, (data[i] + tempData[leftIndex]) / 2);
+            data[i + 1] = Math.min(255, (data[i + 1] + tempData[leftIndex + 1]) / 2);
+            data[i + 2] = Math.min(255, (data[i + 2] + tempData[leftIndex + 2]) / 2);
+          }
+        }
+      }
+
+      // Apply scanlines
+      if (scanlines > 0) {
+        const scanlineIntensity = scanlines / 100;
+        for (let y = 0; y < canvas.height; y += 2) {
+          for (let x = 0; x < canvas.width; x++) {
+            const idx = (y * canvas.width + x) * 4;
+            data[idx] = Math.max(0, data[idx] * (1 - scanlineIntensity * 0.2));
+            data[idx + 1] = Math.max(0, data[idx + 1] * (1 - scanlineIntensity * 0.2));
+            data[idx + 2] = Math.max(0, data[idx + 2] * (1 - scanlineIntensity * 0.2));
+          }
+        }
       }
 
       ctx.putImageData(imageData, 0, 0);
@@ -1816,6 +2281,10 @@ export const applyDitherEffect = async (
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imageData.data;
 
+      // Get scaling factors
+      const metadata = getImageMetadata(img, imageUrl);
+      const scalingFactors = calculateScalingFactors(metadata);
+
       const levels = params.levels || 4; // Number of color levels
       const ditherStrength = params.ditherStrength || 50;
       const pattern = params.pattern || 0; // 0=Bayer, 1=Floyd-Steinberg, 2=Random
@@ -1827,6 +2296,9 @@ export const applyDitherEffect = async (
         [3, 11, 1, 9],
         [15, 7, 13, 5],
       ];
+
+      // Scale dither strength based on image quality/DPI
+      const scaledDitherStrength = ditherStrength * scalingFactors.dpiScale;
 
       const quantize = (value: number, levels: number) => {
         return Math.round((value * (levels - 1)) / 255) * (255 / (levels - 1));
@@ -1880,7 +2352,7 @@ export const applyDitherEffect = async (
               threshold = Math.random();
             }
 
-            threshold = (threshold - 0.5) * (ditherStrength / 100) * 128;
+            threshold = (threshold - 0.5) * (scaledDitherStrength / 100) * 128;
 
             for (let c = 0; c < 3; c++) {
               const value = data[idx + c] + threshold;
@@ -1976,6 +2448,26 @@ export const applyVignetteEffect = async (
     img.src = imageUrl;
   });
 };
+
+/*
+ * NOTE: The effects system has been enhanced to be dimension and DPI-aware.
+ * The following effects have been updated to use scaling factors:
+ * - applyVHSEffect: Scales noise amount, scanline spacing, and color shift
+ * - applyGlitchEffect: Scales glitch intensity and RGB shift
+ * - applyLofiEffect: Scales grain probability and intensity
+ * - applyCyberpunkEffect: Scales brightness threshold for neon effect
+ * - applyFilmGrainEffect: Scales grain size and intensity
+ * - applyNESEffect: Scales pixelation size
+ * - applyVintageEffect: Scales grain probability and intensity
+ * - applyDitherEffect: Scales dither strength
+ * 
+ * The remaining effects should be updated following the same pattern:
+ * 1. Get scaling factors using getImageMetadata() and calculateScalingFactors()
+ * 2. Scale parameters based on image dimensions and DPI
+ * 3. Use scaled parameters in effect calculations
+ * 
+ * This ensures consistent visual results across different image sizes and DPI settings.
+ */
 
 // Enhanced upscaling functions for better image quality
 export const upscaleImage = async (

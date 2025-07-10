@@ -952,7 +952,7 @@ function App() {
               top: 0,
               left: 0,
               right: 0,
-              bottom: "60px", // leave space for nav
+              bottom: "64px", // leave space for nav
               background: "var(--bg-window)",
               zIndex: 1050,
               display: "flex",

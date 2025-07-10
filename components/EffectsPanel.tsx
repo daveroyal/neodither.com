@@ -127,11 +127,28 @@ const EFFECT_CATEGORIES: Record<string, EffectCategory> = {
         id: "vhs",
         name: "VHS Glitch",
         icon: "📺",
-        description: "Retro VHS distortion",
+        description: "Dramatic VHS tape glitches",
         params: {
-          distortion: { min: 0, max: 100, default: 30, label: "Distortion" },
-          noise: { min: 0, max: 100, default: 25, label: "Static Noise" },
+          tracking: { min: 0, max: 100, default: 30, label: "Tracking Errors" },
+          chromatic: { min: 0, max: 100, default: 25, label: "Color Separation" },
+          dropout: { min: 0, max: 100, default: 20, label: "Signal Dropout" },
+          syncLoss: { min: 0, max: 100, default: 15, label: "Sync Loss" },
+          tapeNoise: { min: 0, max: 100, default: 25, label: "Tape Noise" },
+          colorBleed: { min: 0, max: 100, default: 30, label: "Color Bleeding" },
           scanlines: { min: 0, max: 100, default: 40, label: "Scanlines" },
+          noiseType: { 
+            min: 0,
+            max: 3,
+            type: "select", 
+            default: 0, 
+            label: "Noise Type",
+            options: [
+              { value: 0, label: "Mixed" },
+              { value: 1, label: "Luminance" },
+              { value: 2, label: "Chrominance" },
+              { value: 3, label: "High Frequency" }
+            ]
+          },
         },
       },
       {
@@ -154,6 +171,8 @@ const EFFECT_CATEGORIES: Record<string, EffectCategory> = {
           pixelation: { min: 1, max: 8, default: 4, label: "Pixel Size" },
           colorDepth: { min: 4, max: 16, default: 8, label: "Color Depth" },
           contrast: { min: 80, max: 150, default: 120, label: "Contrast" },
+          scanlines: { min: 0, max: 100, default: 20, label: "Scanlines" },
+          dithering: { min: 0, max: 100, default: 15, label: "Dithering" },
         },
       },
       {
@@ -170,6 +189,8 @@ const EFFECT_CATEGORIES: Record<string, EffectCategory> = {
             default: 512,
             label: "Color Depth",
           },
+          scanlines: { min: 0, max: 100, default: 30, label: "Scanlines" },
+          sharpness: { min: 50, max: 200, default: 130, label: "Sharpness" },
         },
       },
       {
@@ -178,7 +199,7 @@ const EFFECT_CATEGORIES: Record<string, EffectCategory> = {
         icon: "🎯",
         description: "16-bit Nintendo smoothness",
         params: {
-          softness: { min: 0, max: 60, default: 40, label: "Softness" },
+          softness: { min: 0, max: 60, default: 40, label: "CRT Softness" },
           colorBoost: {
             min: 100,
             max: 150,
@@ -186,6 +207,8 @@ const EFFECT_CATEGORIES: Record<string, EffectCategory> = {
             label: "Color Boost",
           },
           brightness: { min: 90, max: 130, default: 110, label: "Brightness" },
+          colorBleed: { min: 0, max: 100, default: 25, label: "Color Bleeding" },
+          scanlines: { min: 0, max: 100, default: 15, label: "Scanlines" },
         },
       },
       {
@@ -217,9 +240,11 @@ const EFFECT_CATEGORIES: Record<string, EffectCategory> = {
         icon: "⚡",
         description: "Digital corruption effect",
         params: {
-          intensity: { min: 0, max: 100, default: 50, label: "Intensity" },
-          blockSize: { min: 1, max: 50, default: 10, label: "Block Size" },
-          colorShift: { min: 0, max: 100, default: 30, label: "Color Shift" },
+          intensity: { min: 0, max: 100, default: 50, label: "Glitch Intensity" },
+          frequency: { min: 0, max: 100, default: 30, label: "Glitch Frequency" },
+          rgbShift: { min: 0, max: 100, default: 15, label: "RGB Separation" },
+          blockCorruption: { min: 0, max: 100, default: 40, label: "Block Corruption" },
+          digitalNoise: { min: 0, max: 100, default: 20, label: "Digital Noise" },
         },
       },
       {
@@ -228,9 +253,11 @@ const EFFECT_CATEGORIES: Record<string, EffectCategory> = {
         icon: "🤖",
         description: "Futuristic neon glow",
         params: {
-          neonGlow: { min: 0, max: 100, default: 70, label: "Neon Glow" },
-          contrast: { min: 0, max: 200, default: 120, label: "Contrast" },
-          saturation: { min: 0, max: 200, default: 150, label: "Saturation" },
+          neon: { min: 0, max: 100, default: 70, label: "Neon Intensity" },
+          contrast: { min: 0, max: 200, default: 80, label: "Contrast" },
+          colorTemp: { min: 0, max: 100, default: 60, label: "Cool/Warm" },
+          glowRadius: { min: 0, max: 100, default: 30, label: "Glow Radius" },
+          saturation: { min: 50, max: 200, default: 150, label: "Color Boost" },
         },
       },
       {
@@ -241,7 +268,9 @@ const EFFECT_CATEGORIES: Record<string, EffectCategory> = {
         params: {
           crtGlow: { min: 0, max: 100, default: 70, label: "CRT Glow" },
           matrixTint: { min: 0, max: 100, default: 60, label: "Matrix Tint" },
-          scanlines: { min: 0, max: 60, default: 40, label: "Scanlines" },
+          scanlines: { min: 0, max: 100, default: 40, label: "Scanlines" },
+          phosphorDecay: { min: 0, max: 100, default: 30, label: "Phosphor Decay" },
+          interference: { min: 0, max: 100, default: 20, label: "Signal Noise" },
         },
       },
       {
@@ -284,9 +313,12 @@ const EFFECT_CATEGORIES: Record<string, EffectCategory> = {
         icon: "📸",
         description: "Classic film look",
         params: {
-          age: { min: 0, max: 100, default: 50, label: "Age" },
-          warmth: { min: 0, max: 100, default: 40, label: "Warmth" },
+          fade: { min: 0, max: 100, default: 50, label: "Fade" },
           grain: { min: 0, max: 100, default: 30, label: "Grain" },
+          vignette: { min: 0, max: 100, default: 25, label: "Vignette" },
+          warmth: { min: 0, max: 100, default: 40, label: "Warmth" },
+          scratches: { min: 0, max: 100, default: 20, label: "Scratches" },
+          dustSpots: { min: 0, max: 100, default: 15, label: "Dust Spots" },
         },
       },
       {
@@ -316,8 +348,24 @@ const EFFECT_CATEGORIES: Record<string, EffectCategory> = {
         icon: "🎞️",
         description: "Analog film texture",
         params: {
-          intensity: { min: 0, max: 100, default: 40, label: "Intensity" },
+          intensity: { min: 0, max: 100, default: 65, label: "Intensity" },
           size: { min: 1, max: 10, default: 3, label: "Grain Size" },
+          opacity: { min: 0, max: 100, default: 80, label: "Opacity" },
+          grainType: {
+            min: 0,
+            max: 3,
+            type: "select",
+            default: 0,
+            label: "Grain Type",
+            options: [
+              { value: 0, label: "Fine" },
+              { value: 1, label: "Medium" },
+              { value: 2, label: "Coarse" },
+              { value: 3, label: "Mixed" }
+            ]
+          },
+          shadows: { min: 0, max: 100, default: 85, label: "Shadow Grain" },
+          highlights: { min: 0, max: 100, default: 45, label: "Highlight Grain" },
         },
       },
       {
@@ -421,8 +469,22 @@ const EFFECT_CATEGORIES: Record<string, EffectCategory> = {
         icon: "⚫",
         description: "Monochrome conversion",
         params: {
-          contrast: { min: 0, max: 200, default: 100, label: "Contrast" },
+          contrast: { min: 0, max: 200, default: 110, label: "Contrast" },
           brightness: { min: 0, max: 200, default: 100, label: "Brightness" },
+          grain: { min: 0, max: 50, default: 15, label: "Film Grain" },
+          conversionMethod: {
+            min: 0,
+            max: 3,
+            type: "select",
+            default: 0,
+            label: "Conversion Method",
+            options: [
+              { value: 0, label: "Luminance" },
+              { value: 1, label: "Red Channel" },
+              { value: 2, label: "Green Channel" },
+              { value: 3, label: "Blue Channel" }
+            ]
+          },
         },
       },
       {
@@ -432,7 +494,20 @@ const EFFECT_CATEGORIES: Record<string, EffectCategory> = {
         description: "Infrared camera effect",
         params: {
           intensity: { min: 0, max: 100, default: 70, label: "Intensity" },
-          colorShift: { min: 0, max: 100, default: 50, label: "Color Shift" },
+          redChannel: { min: 0, max: 200, default: 150, label: "Red Boost" },
+          contrast: { min: 50, max: 200, default: 120, label: "Contrast" },
+          falseColor: {
+            min: 0,
+            max: 2,
+            type: "select",
+            default: 0,
+            label: "False Color",
+            options: [
+              { value: 0, label: "Standard" },
+              { value: 1, label: "Wood's Effect" },
+              { value: 2, label: "Aerochrome" }
+            ]
+          },
         },
       },
       {
@@ -441,8 +516,23 @@ const EFFECT_CATEGORIES: Record<string, EffectCategory> = {
         icon: "🔥",
         description: "Thermal imaging effect",
         params: {
-          intensity: { min: 0, max: 100, default: 60, label: "Intensity" },
-          colorMap: { min: 0, max: 5, default: 2, label: "Color Map" },
+          intensity: { min: 0, max: 100, default: 80, label: "Intensity" },
+          colorRange: { min: 20, max: 100, default: 60, label: "Color Range" },
+          contrast: { min: 80, max: 200, default: 140, label: "Contrast" },
+          palette: {
+            min: 0,
+            max: 4,
+            type: "select",
+            default: 0,
+            label: "Thermal Palette",
+            options: [
+              { value: 0, label: "Hot Iron" },
+              { value: 1, label: "Rainbow" },
+              { value: 2, label: "Grayscale" },
+              { value: 3, label: "Medical" },
+              { value: 4, label: "Arctic" }
+            ]
+          },
         },
       },
       {
@@ -513,6 +603,7 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
   const [processedImagePreview, setProcessedImagePreview] = useState<
     string | null
   >(null);
+  const [layoutResetKey, setLayoutResetKey] = useState(0);
 
   // Get all effects from all categories
   const allEffects = useMemo(() => {
@@ -556,6 +647,8 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
     setError(null);
     setShowOriginal(false);
     setProcessedImagePreview(null);
+    // Force layout reset by changing the key
+    setLayoutResetKey(prev => prev + 1);
   }, []);
 
   const handleApplyPreview = useCallback(() => {
@@ -660,6 +753,13 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
     }
   }, [isPreviewMode, selectedEffect, currentImage, generateLivePreview]);
 
+  // Reset layout key when preview mode changes
+  useEffect(() => {
+    if (!isPreviewMode) {
+      setLayoutResetKey(prev => prev + 1);
+    }
+  }, [isPreviewMode]);
+
   const handleEffectClick = useCallback(
     (effectId: string) => {
       if (!currentImage) {
@@ -709,23 +809,26 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        padding: "6px",
-        gap: "8px",
+        padding: "4px",
+        gap: "4px",
+        background: "var(--bg-primary)",
+        fontFamily: "MS Sans Serif, sans-serif",
+        fontSize: "11px",
       }}
     >
       {/* Error Display */}
       {error && (
         <div
-          className="win99-sunken"
           style={{
             padding: "6px",
-            background: "var(--bg-input)",
-            border: "1px solid var(--border-sunken)",
-            fontSize: "10px",
+            background: "var(--bg-warning)",
+            border: "1px solid var(--border-secondary)",
+            fontSize: "11px",
             color: "var(--text-primary)",
             display: "flex",
             alignItems: "center",
             gap: "4px",
+            borderRadius: "0",
           }}
         >
           <span>⚠️</span>
@@ -735,11 +838,9 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
 
       {/* Search and Filter Section */}
       <div
-        className="win99-sunken"
         style={{
-          padding: "6px",
-          background: "var(--bg-input)",
-          border: "1px solid var(--border-window)",
+          padding: "8px",
+          background: "var(--bg-primary)",
           marginBottom: "4px",
         }}
       >
@@ -754,11 +855,13 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
               style={{
                 width: "100%",
                 padding: "4px 20px 4px 4px",
-                fontSize: "10px",
-                border: "none",
-                background: "transparent",
+                fontSize: "11px",
+                border: "2px inset var(--bg-primary)",
+                background: "var(--bg-input)",
                 outline: "none",
                 color: "var(--text-primary)",
+                fontFamily: "MS Sans Serif, sans-serif",
+                borderRadius: "0",
               }}
             />
             {searchTerm && (
@@ -766,14 +869,16 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
                 onClick={() => setSearchTerm("")}
                 style={{
                   position: "absolute",
-                  right: "2px",
-                  top: "2px",
-                  background: "none",
-                  border: "none",
-                  fontSize: "8px",
+                  right: "4px",
+                  top: "4px",
+                  background: "var(--bg-button)",
+                  border: "1px outset var(--bg-button)",
+                  fontSize: "10px",
                   cursor: "pointer",
-                  color: "var(--text-secondary)",
-                  padding: "2px",
+                  color: "var(--text-primary)",
+                  padding: "2px 4px",
+                  fontFamily: "MS Sans Serif, sans-serif",
+                  borderRadius: "0",
                 }}
                 title="Clear search"
               >
@@ -788,169 +893,98 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
           style={{
             display: "flex",
             flexWrap: "wrap",
-            gap: "2px",
+            gap: isMobile ? "1px" : "2px",
             opacity: searchTerm ? 0.6 : 1,
           }}
         >
           {/* All Effects Button */}
           <button
-            className={`win99-button ${
-              selectedCategory === "all" ? "active" : ""
-            }`}
             onClick={() => {
               setSelectedCategory("all");
               if (searchTerm) setSearchTerm(""); // Clear search when clicking category
             }}
             style={{
               flex: "1",
-              minWidth: "60px",
-              padding: "3px 2px",
-              fontSize: "8px",
+              minWidth: isMobile ? "45px" : "60px",
+              padding: isMobile ? "3px 1px" : "4px 2px",
+              fontSize: isMobile ? "9px" : "11px",
               fontWeight: "bold",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              gap: "2px",
-              background:
-                selectedCategory === "all"
-                  ? "var(--bg-button-pressed)"
-                  : "var(--bg-button)",
-              color:
-                selectedCategory === "all"
-                  ? "var(--text-titlebar)"
-                  : "var(--text-primary)",
-              border: `1px solid ${
-                selectedCategory === "all"
-                  ? "var(--border-raised)"
-                  : "var(--border-window)"
-              }`,
+              gap: isMobile ? "1px" : "2px",
+              background: selectedCategory === "all" ? "var(--bg-button-active)" : "var(--bg-button)",
+              color: selectedCategory === "all" ? "var(--text-button-active)" : "var(--text-primary)",
+              border: selectedCategory === "all" 
+                ? "2px inset var(--bg-button)"
+                : "2px outset var(--bg-button)",
               opacity: isPreviewMode ? 0.7 : 1,
               cursor: searchTerm ? "pointer" : "default",
+              fontFamily: "MS Sans Serif, sans-serif",
+              borderRadius: "0",
             }}
             disabled={isPreviewMode}
             title={searchTerm ? "Show all effects" : "All effects"}
           >
-            <span style={{ fontSize: "10px" }}>✨</span>
+            <span style={{ fontSize: isMobile ? "8px" : "10px" }}>✨</span>
             <span>All</span>
           </button>
 
           {Object.entries(EFFECT_CATEGORIES).map(([key, category]) => (
             <button
               key={key}
-              className={`win99-button ${
-                selectedCategory === key ? "active" : ""
-              }`}
               onClick={() => {
                 setSelectedCategory(key);
                 if (searchTerm) setSearchTerm(""); // Clear search when clicking category
               }}
               style={{
                 flex: "1",
-                minWidth: "60px",
-                padding: "3px 2px",
-                fontSize: "8px",
+                minWidth: isMobile ? "45px" : "60px",
+                padding: isMobile ? "3px 1px" : "4px 2px",
+                fontSize: isMobile ? "9px" : "11px",
                 fontWeight: "bold",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: "2px",
-                background:
-                  selectedCategory === key
-                    ? "var(--bg-button-pressed)"
-                    : "var(--bg-button)",
-                color:
-                  selectedCategory === key
-                    ? "var(--text-titlebar)"
-                    : "var(--text-primary)",
-                border: `1px solid ${
-                  selectedCategory === key
-                    ? "var(--border-raised)"
-                    : "var(--border-window)"
-                }`,
+                gap: isMobile ? "1px" : "2px",
+                background: selectedCategory === key ? "var(--bg-button-active)" : "var(--bg-button)",
+                color: selectedCategory === key ? "var(--text-button-active)" : "var(--text-primary)",
+                border: selectedCategory === key 
+                  ? "2px inset var(--bg-button)"
+                  : "2px outset var(--bg-button)",
                 opacity: isPreviewMode ? 0.7 : 1,
                 cursor: searchTerm ? "pointer" : "default",
+                fontFamily: "MS Sans Serif, sans-serif",
+                borderRadius: "0",
               }}
               disabled={isPreviewMode}
               title={searchTerm ? `Switch to ${category.name}` : category.name}
             >
-              <span style={{ fontSize: "10px" }}>{category.icon}</span>
+              <span style={{ fontSize: isMobile ? "8px" : "10px" }}>{category.icon}</span>
               <span>{category.name.split(" ")[0]}</span>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Selected Layer Info */}
-      {selectedLayer && !isPreviewMode && (
-        <div
-          className="win99-sunken"
-          style={{
-            padding: "6px",
-            background: "var(--bg-input)",
-            border: "1px solid var(--border-window)",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "10px",
-              fontWeight: "bold",
-              color: "var(--text-primary)",
-              marginBottom: "4px",
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-            }}
-          >
-            <span>📍</span>
-            <span>{selectedLayer.name}</span>
-          </div>
 
-          {selectedLayer.effectType ? (
-            <button
-              className="win99-button"
-              onClick={handleEditSelectedLayer}
-              style={{
-                width: "100%",
-                fontSize: "9px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "4px",
-                background: "var(--bg-button-hover)",
-                fontWeight: "bold",
-                padding: "4px",
-              }}
-            >
-              <span>🔧</span>
-              <span>Edit Effect</span>
-            </button>
-          ) : (
-            <div
-              style={{
-                fontSize: "9px",
-                color: "var(--text-secondary)",
-                fontStyle: "italic",
-                textAlign: "center",
-                padding: "4px",
-              }}
-            >
-              Cannot edit this layer
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Effect Buttons Grid */}
-      <div style={{ flex: 1, overflowY: "auto" }}>
+      <div 
+        key={layoutResetKey} 
+        style={{ flex: 1, overflow: "auto" }} 
+        className="win99-scrollbar effects-grid-container"
+      >
         {/* Search Results Counter */}
         {searchTerm && (
           <div
             style={{
-              fontSize: "9px",
+              fontSize: "11px",
               color: "var(--text-secondary)",
               marginBottom: "4px",
               textAlign: "center",
               fontStyle: "italic",
+              fontFamily: "MS Sans Serif, sans-serif",
             }}
           >
             Found {filteredEffects.length} effect
@@ -971,9 +1005,6 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
             return (
               <button
                 key={effect.id}
-                className={`win99-button ${
-                  selectedEffect === effect.id ? "active" : ""
-                }`}
                 onClick={() => !isPreviewMode && handleEffectClick(effect.id)}
                 title={
                   isPreviewMode
@@ -985,23 +1016,20 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
                   display: "flex",
                   flexDirection: "column",
                   alignItems: "center",
-                  padding: "6px 4px",
+                  padding: "8px 4px",
                   gap: "3px",
-                  minHeight: "50px",
-                  fontSize: "8px",
+                  minHeight: "60px",
+                  fontSize: "11px",
                   opacity: !currentImage || isPreviewMode ? 0.5 : 1,
                   cursor:
                     !currentImage || isPreviewMode ? "not-allowed" : "pointer",
-                  background:
-                    selectedEffect === effect.id
-                      ? "var(--bg-button-active)"
-                      : "var(--bg-button)",
-                  border: `2px outset var(--border-window)`,
-                  position: "relative",
-                  boxShadow:
-                    selectedEffect === effect.id
-                      ? "inset 1px 1px var(--border-sunken), inset -1px -1px var(--border-raised)"
-                      : "none",
+                  background: selectedEffect === effect.id ? "var(--bg-button-active)" : "var(--bg-button)",
+                  border: selectedEffect === effect.id 
+                    ? "2px inset var(--bg-button)"
+                    : "2px outset var(--bg-button)",
+                  color: selectedEffect === effect.id ? "var(--text-button-active)" : "var(--text-primary)",
+                  fontFamily: "MS Sans Serif, sans-serif",
+                  borderRadius: "0",
                 }}
               >
                 <div style={{ fontSize: "16px" }}>{effect.icon}</div>
@@ -1025,42 +1053,12 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
       {/* Live Preview Controls */}
       {isPreviewMode && selectedEffect && selectedEffectData && (
         <div
-          className="win99-sunken"
           style={{
             padding: "8px",
-            background: "var(--bg-input)",
-            border: "1px solid var(--border-window)",
+            background: "var(--bg-primary)",
           }}
         >
-          <div
-            style={{
-              fontSize: "11px",
-              fontWeight: "bold",
-              marginBottom: "8px",
-              color: "var(--text-primary)",
-              textAlign: "center",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "4px",
-            }}
-          >
-            <span>{selectedEffectData.icon}</span>
-            <span>{selectedEffectData.name}</span>
-            {isEditingLayer && (
-              <span
-                style={{
-                  background: "var(--bg-button-hover)",
-                  color: "var(--text-primary)",
-                  padding: "1px 4px",
-                  fontSize: "8px",
-                  borderRadius: "2px",
-                }}
-              >
-                EDIT
-              </span>
-            )}
-          </div>
+
 
           {/* Mobile Preview Thumbnail */}
           {isMobile && (currentImage || processedImagePreview) && (
@@ -1068,17 +1066,17 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
               style={{
                 marginBottom: "12px",
                 padding: "8px",
-                background: "var(--bg-content)",
-                border: "2px inset var(--border-window)",
+                background: "var(--bg-primary)",
               }}
             >
               <div
                 style={{
-                  fontSize: "10px",
+                  fontSize: "11px",
                   fontWeight: "bold",
                   marginBottom: "6px",
                   color: "var(--text-primary)",
                   textAlign: "center",
+                  fontFamily: "MS Sans Serif, sans-serif",
                 }}
               >
                 Preview
@@ -1095,7 +1093,7 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
                          width: "100%",
                          height: "auto",
                          objectFit: "contain",
-                         border: "2px inset var(--border-window)",
+                         border: "2px inset var(--bg-button)",
                          display: "block",
                          margin: "0 auto",
                        }}
@@ -1103,7 +1101,6 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
                      
                      {/* Overlay Toggle Button */}
                      <button
-                       className="win99-button"
                        onClick={handleComparisonToggle}
                        disabled={isProcessing}
                        style={{
@@ -1114,15 +1111,16 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
                          fontSize: "12px",
                          width: "28px",
                          height: "28px",
-                         background: "rgba(192, 192, 192, 0.9)",
-                         border: "1px outset var(--border-window)",
+                         background: "var(--bg-button)",
+                         border: "2px outset var(--bg-button)",
                          opacity: isProcessing ? 0.7 : 1,
                          cursor: "pointer",
                          display: "flex",
                          alignItems: "center",
                          justifyContent: "center",
                          borderRadius: "0",
-                         boxShadow: "1px 1px 2px rgba(0, 0, 0, 0.3)",
+                         fontFamily: "MS Sans Serif, sans-serif",
+                         color: "var(--text-primary)",
                        }}
                        title={showOriginal ? "Show effect" : "Show original"}
                                             >
@@ -1134,7 +1132,7 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
                      style={{
                        width: "100%",
                        height: "200px",
-                       border: "2px inset var(--border-window)",
+                       border: "2px inset var(--bg-button)",
                        display: "flex",
                        alignItems: "center",
                        justifyContent: "center",
@@ -1144,6 +1142,7 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
                        margin: "0 auto",
                        flexDirection: "column",
                        gap: "8px",
+                       fontFamily: "MS Sans Serif, sans-serif",
                      }}
                    >
                      <div>{isProcessing ? "⏳" : "🎨"}</div>
@@ -1166,22 +1165,26 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
               }}
             >
               <button
-                className="win99-button"
                 onClick={handleComparisonToggle}
                 disabled={isProcessing}
                 style={{
                   flex: 1,
-                  fontSize: "9px",
-                  padding: "4px",
+                  fontSize: "11px",
+                  padding: "6px",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   gap: "2px",
-                  background: showOriginal
-                    ? "var(--bg-button)"
-                    : "var(--bg-button-active)",
+                  background: showOriginal ? "var(--bg-button)" : "var(--bg-button-active)",
+                  color: showOriginal ? "var(--text-primary)" : "var(--text-button-active)",
                   fontWeight: "bold",
                   opacity: isProcessing ? 0.7 : 1,
+                  border: showOriginal 
+                    ? "2px outset var(--bg-button)"
+                    : "2px inset var(--bg-button)",
+                  fontFamily: "MS Sans Serif, sans-serif",
+                  borderRadius: "0",
+                  cursor: "pointer",
                 }}
               >
                 {isProcessing ? (
@@ -1209,18 +1212,20 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
                     justifyContent: "space-between",
                     alignItems: "center",
                     marginBottom: "3px",
-                    fontSize: "10px",
+                    fontSize: "11px",
+                    fontFamily: "MS Sans Serif, sans-serif",
                   }}
                 >
-                  <span style={{ fontWeight: "bold" }}>{param.label}:</span>
+                  <span style={{ fontWeight: "bold", color: "var(--text-primary)" }}>{param.label}:</span>
                   <span
                     style={{
-                      background: "var(--bg-content)",
-                      border: "1px inset var(--border-window)",
+                      background: "var(--bg-input)",
+                      border: "2px inset var(--bg-button)",
                       padding: "2px 6px",
                       minWidth: "35px",
                       textAlign: "center",
                       fontWeight: "bold",
+                      color: "var(--text-primary)",
                     }}
                   >
                     {param.type === "color"
@@ -1238,7 +1243,7 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
                     style={{
                       width: "100%",
                       height: "30px",
-                      border: "1px inset var(--border-window)",
+                      border: "2px inset var(--bg-button)",
                       cursor: "pointer",
                     }}
                   />
@@ -1253,11 +1258,12 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
                     style={{
                       width: "100%",
                       height: "30px",
-                      border: "1px inset var(--border-window)",
-                      background: "var(--bg-content)",
+                      border: "2px inset var(--bg-button)",
+                      background: "var(--bg-input)",
                       color: "var(--text-primary)",
-                      fontSize: "10px",
+                      fontSize: "11px",
                       padding: "2px 4px",
+                      fontFamily: "MS Sans Serif, sans-serif",
                     }}
                   >
                     {param.options?.map((option) => (
@@ -1286,9 +1292,10 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
                       style={{
                         display: "flex",
                         justifyContent: "space-between",
-                        fontSize: "9px",
+                        fontSize: "10px",
                         color: "var(--text-secondary)",
                         marginTop: "2px",
+                        fontFamily: "MS Sans Serif, sans-serif",
                       }}
                     >
                       <span>{param.min}</span>
@@ -1303,7 +1310,6 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
           {/* Preview Action Buttons */}
           <div style={{ display: "flex", gap: "4px", marginTop: "8px" }}>
             <button
-              className="win99-button effects-apply-btn"
               onClick={handleApplyPreview}
               disabled={isProcessing}
               style={{
@@ -1313,18 +1319,21 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
                 justifyContent: "center",
                 gap: "4px",
                 fontWeight: "bold",
-                background: "var(--bg-button-active)",
+                background: "var(--bg-button)",
                 color: "var(--text-primary)",
-                border: "2px outset var(--border-raised)",
-                padding: "6px",
+                border: "2px outset var(--bg-button)",
+                padding: "8px",
                 opacity: isProcessing ? 0.5 : 1,
+                fontSize: "11px",
+                fontFamily: "MS Sans Serif, sans-serif",
+                borderRadius: "0",
+                cursor: "pointer",
               }}
             >
               <span>✓</span>
               <span>{isEditingLayer ? "Update" : "Apply"}</span>
             </button>
             <button
-              className="win99-button effects-cancel-btn"
               onClick={() => {
                 onCancelPreview();
                 clearEffectSelection();
@@ -1337,8 +1346,12 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
                 gap: "4px",
                 background: "var(--bg-button)",
                 color: "var(--text-primary)",
-                border: "2px outset var(--border-raised)",
-                padding: "6px",
+                border: "2px outset var(--bg-button)",
+                padding: "8px",
+                fontSize: "11px",
+                fontFamily: "MS Sans Serif, sans-serif",
+                borderRadius: "0",
+                cursor: "pointer",
               }}
             >
               <span>✕</span>
