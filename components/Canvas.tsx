@@ -74,8 +74,9 @@ export const Canvas: React.FC<CanvasProps> = ({
     const updateCanvasSize = () => {
       if (containerRef.current) {
         const rect = containerRef.current.getBoundingClientRect();
-        const maxWidth = Math.min(rect.width - 20, 800);
-        const maxHeight = Math.min(rect.height - 20, 600);
+        // Remove artificial size limits - use full available space with minimal padding
+        const maxWidth = rect.width - 40; // Small padding for UI elements
+        const maxHeight = rect.height - 40;
         setCanvasSize({ width: maxWidth, height: maxHeight });
       }
     };
@@ -100,15 +101,33 @@ export const Canvas: React.FC<CanvasProps> = ({
     const img = new Image();
 
     img.onload = () => {
-      // Calculate display size maintaining aspect ratio
+      // Calculate display size maintaining aspect ratio, prioritizing maximum size
       const aspectRatio = img.width / img.height;
-      let displayWidth = canvasSize.width;
-      let displayHeight = canvasSize.height;
-
-      if (aspectRatio > 1) {
+      const containerAspectRatio = canvasSize.width / canvasSize.height;
+      
+      let displayWidth, displayHeight;
+      
+      // Always use the maximum possible size while maintaining aspect ratio
+      if (aspectRatio > containerAspectRatio) {
+        // Image is wider than container - fit to width
+        displayWidth = canvasSize.width;
         displayHeight = displayWidth / aspectRatio;
       } else {
+        // Image is taller than container - fit to height
+        displayHeight = canvasSize.height;
         displayWidth = displayHeight * aspectRatio;
+      }
+
+      // Ensure minimum size for small containers
+      const minSize = Math.min(canvasSize.width, canvasSize.height) * 0.8;
+      if (displayWidth < minSize || displayHeight < minSize) {
+        if (displayWidth < displayHeight) {
+          displayWidth = minSize;
+          displayHeight = displayWidth / aspectRatio;
+        } else {
+          displayHeight = minSize;
+          displayWidth = displayHeight * aspectRatio;
+        }
       }
 
       canvas.width = displayWidth;
@@ -582,11 +601,12 @@ export const Canvas: React.FC<CanvasProps> = ({
         position: "relative",
         background: "var(--bg-content)",
         padding: "2px",
+        overflow: "hidden",
       }}
     >
       {/* Canvas Tools Bar */}
 
-      {/* Navigator */}
+      {/* Combined Navigator and Zoom Controls */}
       {currentImage && imageLoaded && (
         <div
           style={{
@@ -601,9 +621,11 @@ export const Canvas: React.FC<CanvasProps> = ({
             style={{
               background: "var(--bg-window)",
               border: "2px outset var(--border-window)",
-              padding: "4px",
+              padding: "6px",
+              minWidth: "140px",
             }}
           >
+            {/* Navigator Section */}
             <div
               style={{
                 fontSize: "9px",
@@ -611,6 +633,8 @@ export const Canvas: React.FC<CanvasProps> = ({
                 marginBottom: "4px",
                 textAlign: "center",
                 color: "var(--text-primary)",
+                borderBottom: "1px solid var(--border-sunken)",
+                paddingBottom: "2px",
               }}
             >
               Navigator
@@ -618,11 +642,12 @@ export const Canvas: React.FC<CanvasProps> = ({
             <div
               style={{
                 width: "120px",
-                height: "80px",
+                height: "60px",
                 border: "1px inset var(--border-window)",
                 background: "var(--bg-input)",
                 position: "relative",
                 overflow: "hidden",
+                marginBottom: "6px",
               }}
             >
               <img
@@ -661,6 +686,72 @@ export const Canvas: React.FC<CanvasProps> = ({
                   }}
                 />
               )}
+            </div>
+
+            {/* Zoom Controls Section */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "4px",
+                fontSize: "10px",
+              }}
+            >
+              <button
+                className="win99-button"
+                onClick={() => setZoom(Math.max(25, zoom - 25))}
+                style={{
+                  fontSize: "10px",
+                  padding: "2px 4px",
+                  minHeight: "20px",
+                  minWidth: "24px",
+                  fontWeight: "bold",
+                }}
+                title="Zoom Out"
+              >
+                -
+              </button>
+              <span
+                style={{
+                  minWidth: "40px",
+                  textAlign: "center",
+                  fontWeight: "bold",
+                  fontSize: "9px",
+                }}
+              >
+                {Math.round(zoom)}%
+              </span>
+              <button
+                className="win99-button"
+                onClick={() => setZoom(Math.min(500, zoom + 25))}
+                style={{
+                  fontSize: "10px",
+                  padding: "2px 4px",
+                  minHeight: "20px",
+                  minWidth: "24px",
+                  fontWeight: "bold",
+                }}
+                title="Zoom In"
+              >
+                +
+              </button>
+              <button
+                className="win99-button"
+                onClick={() => {
+                  setZoom(100);
+                  setPanOffset({ x: 0, y: 0 });
+                }}
+                style={{
+                  fontSize: "8px",
+                  padding: "2px 4px",
+                  minHeight: "20px",
+                  minWidth: "28px",
+                }}
+                title="Reset zoom and center image"
+              >
+                Reset
+              </button>
             </div>
           </div>
         </div>
@@ -820,80 +911,6 @@ export const Canvas: React.FC<CanvasProps> = ({
             }}
           />
 
-          {/* Zoom Controls */}
-          <div
-            className="canvas-zoom-controls"
-            style={{
-              position: "absolute",
-              bottom: "8px",
-              right: "8px",
-              background: "var(--bg-window)",
-              border: "2px outset var(--border-window)",
-              padding: "6px",
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              fontSize: "11px",
-              zIndex: 5,
-              borderRadius: "4px",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
-            }}
-          >
-            <button
-              className="win99-button"
-              onClick={() => setZoom(Math.max(25, zoom - 25))}
-              style={{
-                fontSize: "12px",
-                padding: "4px 6px",
-                minHeight: "28px",
-                minWidth: "32px",
-                fontWeight: "bold",
-              }}
-              title="Zoom Out"
-            >
-              -
-            </button>
-            <span
-              style={{
-                minWidth: "50px",
-                textAlign: "center",
-                fontWeight: "bold",
-              }}
-            >
-              {Math.round(zoom)}%
-            </span>
-            <button
-              className="win99-button"
-              onClick={() => setZoom(Math.min(500, zoom + 25))}
-              style={{
-                fontSize: "12px",
-                padding: "4px 6px",
-                minHeight: "28px",
-                minWidth: "32px",
-                fontWeight: "bold",
-              }}
-              title="Zoom In"
-            >
-              +
-            </button>
-            <button
-              className="win99-button"
-              onClick={() => {
-                setZoom(100);
-                setPanOffset({ x: 0, y: 0 });
-              }}
-              style={{
-                fontSize: "9px",
-                padding: "4px 6px",
-                minHeight: "28px",
-                minWidth: "35px",
-              }}
-              title="Reset zoom and center image"
-            >
-              Reset
-            </button>
-          </div>
-
           {/* Canvas Info */}
           <div
             style={{
@@ -913,9 +930,6 @@ export const Canvas: React.FC<CanvasProps> = ({
               )}
             </div>
           </div>
-
-          {/* Compositing indicator */}
-          {/* Removed isCompositing prop */}
         </div>
       ) : (
         /* No Image State - Upload Area */

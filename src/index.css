@@ -731,6 +731,7 @@
     display: flex;
     flex: 1;
     overflow: hidden;
+    min-height: 0; /* Allow flex items to shrink */
   }
 
   /* Effects sidebar (left) */
@@ -740,6 +741,7 @@
     max-width: 360px;
     border-right: 2px inset var(--border-window);
     background: var(--bg-content);
+    flex-shrink: 0; /* Prevent sidebar from shrinking */
   }
 
   .win99-effects-sidebar .win99-window {
@@ -748,7 +750,7 @@
     border-radius: 0;
   }
 
-  /* Canvas panel (center) */
+  /* Canvas panel (center) - prioritize space for image */
   .win99-canvas-panel {
     flex: 1;
     background: var(--bg-content);
@@ -756,6 +758,8 @@
       inset 1px 1px var(--border-raised);
     display: flex;
     flex-direction: column;
+    min-width: 0; /* Allow canvas to shrink if needed */
+    min-height: 0; /* Allow canvas to shrink if needed */
   }
 
   .win99-canvas-panel .win99-titlebar {
@@ -784,6 +788,7 @@
     background: var(--bg-content);
     position: relative;
     height: 100%;
+    min-height: 0; /* Allow shrinking */
   }
 
   .win99-canvas-container {
@@ -794,16 +799,19 @@
     justify-content: center;
     position: relative;
     background: var(--bg-content);
+    overflow: hidden;
+    min-height: 300px; /* Ensure minimum usable size */
   }
 
   .win99-canvas {
     display: block;
-    max-width: calc(100% - 8px);
-    max-height: calc(100% - 8px);
+    max-width: 100%;
+    max-height: 100%;
     border: 1px solid var(--border-sunken);
     box-shadow: inset -1px -1px var(--border-sunken),
       inset 1px 1px var(--border-raised);
     background: var(--bg-input);
+    object-fit: contain; /* Ensure image maintains aspect ratio */
   }
 
   /* Layers sidebar (right) */
@@ -815,6 +823,7 @@
     background: var(--bg-content);
     display: flex;
     flex-direction: column;
+    flex-shrink: 0; /* Prevent sidebar from shrinking */
   }
 
   .win99-layers-sidebar .win99-window {
