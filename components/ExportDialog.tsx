@@ -21,6 +21,15 @@ interface ExportSettings {
   upscalingMethod: "bilinear" | "bicubic" | "lanczos" | "ai";
 }
 
+interface ZoomPanState {
+  zoom: number;
+  panX: number;
+  panY: number;
+  isDragging: boolean;
+  lastMouseX: number;
+  lastMouseY: number;
+}
+
 export const ExportDialog: React.FC<ExportDialogProps> = ({
   isOpen,
   onClose,
@@ -36,7 +45,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
     quality: 92,
     width: 0,
     height: 0,
-    targetFileSizeKB: 500,
+    targetFileSizeKB: 50,
     maintainAspectRatio: true,
     useTargetFileSize: false,
     useAIEnhancement: false,
@@ -44,9 +53,22 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
   });
   const [previewData, setPreviewData] = useState<string>("");
   const [fileSize, setFileSize] = useState<number>(0);
+  const [baselineFileSize, setBaselineFileSize] = useState<number>(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isAIProcessing, setIsAIProcessing] = useState(false);
+  const [zoomPan, setZoomPan] = useState<ZoomPanState>({
+    zoom: 1,
+    panX: 0,
+    panY: 0,
+    isDragging: false,
+    lastMouseX: 0,
+    lastMouseY: 0,
+  });
+  const [lastTouchDistance, setLastTouchDistance] = useState<number>(0);
+  const [widthInput, setWidthInput] = useState<string>("");
+  const [heightInput, setHeightInput] = useState<string>("");
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const previewContainerRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
 
   // Load original image dimensions
@@ -61,10 +83,26 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
           width: newDimensions.width,
           height: newDimensions.height,
         }));
+        setWidthInput(newDimensions.width.toString());
+        setHeightInput(newDimensions.height.toString());
       };
       img.src = imageData;
     }
   }, [imageData, isOpen]);
+
+  // Reset zoom/pan when dialog opens
+  useEffect(() => {
+    if (isOpen) {
+      setZoomPan({
+        zoom: 1,
+        panX: 0,
+        panY: 0,
+        isDragging: false,
+        lastMouseX: 0,
+        lastMouseY: 0,
+      });
+    }
+  }, [isOpen]);
 
   // Generate preview when settings change
   useEffect(() => {
@@ -72,6 +110,16 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
       generatePreview();
     }
   }, [settings, originalDimensions, isOpen]);
+
+  // Adjust target file size when baseline file size changes
+  useEffect(() => {
+    if (baselineFileSize > 0 && settings.targetFileSizeKB > baselineFileSize) {
+      setSettings(prev => ({
+        ...prev,
+        targetFileSizeKB: Math.max(Math.min(baselineFileSize, prev.targetFileSizeKB), 1)
+      }));
+    }
+  }, [baselineFileSize]);
 
   const generatePreview = async () => {
     if (!imageData || !canvasRef.current) return;
@@ -124,7 +172,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
 
           // Get image data based on format
           let mimeType = "image/png";
-          let quality = settings.quality / 100;
+          let baselineQuality = settings.quality / 100;
 
           switch (settings.format) {
             case "jpeg":
@@ -136,26 +184,36 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
             case "png":
             default:
               mimeType = "image/png";
-              quality = 1.0;
+              baselineQuality = 1.0;
               break;
           }
+
+          // First, calculate baseline file size without target compression
+          const baselineData = canvas.toDataURL(mimeType, baselineQuality);
+          const baselineBase64Length = baselineData.length - `data:${mimeType};base64,`.length;
+          const baselineSizeBytes = (baselineBase64Length * 3) / 4;
+          const baselineSizeKB = Math.round(baselineSizeBytes / 1024);
+          setBaselineFileSize(baselineSizeKB);
+
+          let finalQuality = baselineQuality;
+          let resultData = baselineData;
 
           // If target file size is enabled and format supports compression
           if (
             settings.useTargetFileSize &&
             (settings.format === "jpeg" || settings.format === "webp")
           ) {
-            quality = await findOptimalQuality(
+            finalQuality = await findOptimalQuality(
               canvas,
               mimeType,
               settings.targetFileSizeKB
             );
+            resultData = canvas.toDataURL(mimeType, finalQuality);
           }
 
-          const resultData = canvas.toDataURL(mimeType, quality);
           setPreviewData(resultData);
 
-          // Calculate file size (rough estimate)
+          // Calculate final file size (rough estimate)
           const base64Length =
             resultData.length - `data:${mimeType};base64,`.length;
           const sizeInBytes = (base64Length * 3) / 4;
@@ -179,16 +237,25 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
     mimeType: string,
     targetKB: number
   ): Promise<number> => {
-    let minQuality = 0.1;
+    let minQuality = 0.01; // Go as low as 1% quality for extreme compression
     let maxQuality = 1.0;
-    let bestQuality = settings.quality / 100;
+    let bestQuality = 0.01;
+    let bestSize = Infinity;
+    let closestQuality = 0.01;
 
-    // Binary search for optimal quality
-    for (let i = 0; i < 8; i++) {
+    // More iterations for better precision, especially for very small targets
+    for (let i = 0; i < 20; i++) {
       const testQuality = (minQuality + maxQuality) / 2;
       const testData = canvas.toDataURL(mimeType, testQuality);
       const base64Length = testData.length - `data:${mimeType};base64,`.length;
       const sizeKB = (base64Length * 3) / 4 / 1024;
+
+      // Track the quality that gets us closest to target (not just under)
+      const sizeDiff = Math.abs(sizeKB - targetKB);
+      if (sizeDiff < bestSize) {
+        bestSize = sizeDiff;
+        closestQuality = testQuality;
+      }
 
       if (sizeKB <= targetKB) {
         bestQuality = testQuality;
@@ -198,33 +265,71 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
       }
     }
 
+    // If we can't get under the target, use the quality that gets closest
+    if (bestQuality === 0.01 && bestSize > targetKB * 0.1) {
+      return closestQuality;
+    }
+
+    // For very small targets, try even more aggressive compression
+    if (targetKB <= 10) {
+      // Test extremely low qualities for tiny file sizes
+      const extremeQualities = [0.005, 0.01, 0.02, 0.03, 0.05];
+      let bestExtremeQuality = bestQuality;
+      
+      for (const quality of extremeQualities) {
+        const testData = canvas.toDataURL(mimeType, quality);
+        const base64Length = testData.length - `data:${mimeType};base64,`.length;
+        const sizeKB = (base64Length * 3) / 4 / 1024;
+        
+        if (sizeKB <= targetKB) {
+          bestExtremeQuality = quality;
+        } else {
+          break; // Stop when we exceed target
+        }
+      }
+      
+      return bestExtremeQuality;
+    }
+
     return bestQuality;
   };
 
   const handleDimensionChange = (
     dimension: "width" | "height",
-    value: number
+    value: string
   ) => {
+    if (dimension === "width") {
+      setWidthInput(value);
+    } else {
+      setHeightInput(value);
+    }
+
+    const numValue = value === "" ? 0 : parseInt(value) || 0;
+    
     if (settings.maintainAspectRatio && originalDimensions.width > 0) {
       const aspectRatio = originalDimensions.width / originalDimensions.height;
 
       if (dimension === "width") {
+        const newHeight = numValue === 0 ? 0 : Math.round(numValue / aspectRatio);
         setSettings((prev) => ({
           ...prev,
-          width: value,
-          height: Math.round(value / aspectRatio),
+          width: numValue,
+          height: newHeight,
         }));
+        setHeightInput(newHeight.toString());
       } else {
+        const newWidth = numValue === 0 ? 0 : Math.round(numValue * aspectRatio);
         setSettings((prev) => ({
           ...prev,
-          width: Math.round(value * aspectRatio),
-          height: value,
+          width: newWidth,
+          height: numValue,
         }));
+        setWidthInput(newWidth.toString());
       }
     } else {
       setSettings((prev) => ({
         ...prev,
-        [dimension]: value,
+        [dimension]: numValue,
       }));
     }
   };
@@ -242,6 +347,170 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
       ...prev,
       width: originalDimensions.width,
       height: originalDimensions.height,
+    }));
+    setWidthInput(originalDimensions.width.toString());
+    setHeightInput(originalDimensions.height.toString());
+  };
+
+  // Zoom and pan handlers
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const container = previewContainerRef.current;
+    if (!container) return;
+
+    const rect = container.getBoundingClientRect();
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    
+    const zoomDelta = e.deltaY > 0 ? 0.9 : 1.1;
+    const newZoom = Math.max(0.1, Math.min(5, zoomPan.zoom * zoomDelta));
+    
+    setZoomPan(prev => ({
+      ...prev,
+      zoom: newZoom,
+      panX: centerX - (centerX - prev.panX) * (newZoom / prev.zoom),
+      panY: centerY - (centerY - prev.panY) * (newZoom / prev.zoom),
+    }));
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setZoomPan(prev => ({
+      ...prev,
+      isDragging: true,
+      lastMouseX: e.clientX,
+      lastMouseY: e.clientY,
+    }));
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!zoomPan.isDragging) return;
+    
+    const deltaX = e.clientX - zoomPan.lastMouseX;
+    const deltaY = e.clientY - zoomPan.lastMouseY;
+    
+    setZoomPan(prev => ({
+      ...prev,
+      panX: prev.panX + deltaX,
+      panY: prev.panY + deltaY,
+      lastMouseX: e.clientX,
+      lastMouseY: e.clientY,
+    }));
+  };
+
+  const handleMouseUp = () => {
+    setZoomPan(prev => ({
+      ...prev,
+      isDragging: false,
+    }));
+  };
+
+  // Helper function to get distance between two touch points
+  const getTouchDistance = (touch1: React.Touch, touch2: React.Touch): number => {
+    const dx = touch1.clientX - touch2.clientX;
+    const dy = touch1.clientY - touch2.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  // Touch event handlers for mobile
+  const handleTouchStart = (e: React.TouchEvent) => {
+    e.preventDefault();
+    
+    if (e.touches.length === 1) {
+      // Single touch - start panning
+      const touch = e.touches[0];
+      setZoomPan(prev => ({
+        ...prev,
+        isDragging: true,
+        lastMouseX: touch.clientX,
+        lastMouseY: touch.clientY,
+      }));
+    } else if (e.touches.length === 2) {
+      // Two touches - start pinch-to-zoom
+      const distance = getTouchDistance(e.touches[0], e.touches[1]);
+      setLastTouchDistance(distance);
+      setZoomPan(prev => ({
+        ...prev,
+        isDragging: false, // Stop panning when pinching
+      }));
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    e.preventDefault();
+    
+    if (e.touches.length === 1 && zoomPan.isDragging) {
+      // Single touch - handle panning
+      const touch = e.touches[0];
+      const deltaX = touch.clientX - zoomPan.lastMouseX;
+      const deltaY = touch.clientY - zoomPan.lastMouseY;
+      
+      setZoomPan(prev => ({
+        ...prev,
+        panX: prev.panX + deltaX,
+        panY: prev.panY + deltaY,
+        lastMouseX: touch.clientX,
+        lastMouseY: touch.clientY,
+      }));
+    } else if (e.touches.length === 2 && lastTouchDistance > 0) {
+      // Two touches - handle pinch-to-zoom
+      const container = previewContainerRef.current;
+      if (!container) return;
+
+      const currentDistance = getTouchDistance(e.touches[0], e.touches[1]);
+      const scale = currentDistance / lastTouchDistance;
+      
+      // Calculate center point between the two touches
+      const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      
+      // Convert to relative coordinates within the container
+      const rect = container.getBoundingClientRect();
+      const relativeX = centerX - rect.left;
+      const relativeY = centerY - rect.top;
+      
+      setZoomPan(prev => {
+        const newZoom = Math.max(0.1, Math.min(5, prev.zoom * scale));
+        return {
+          ...prev,
+          zoom: newZoom,
+          panX: relativeX - (relativeX - prev.panX) * (newZoom / prev.zoom),
+          panY: relativeY - (relativeY - prev.panY) * (newZoom / prev.zoom),
+        };
+      });
+      
+      setLastTouchDistance(currentDistance);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setZoomPan(prev => ({
+      ...prev,
+      isDragging: false,
+    }));
+    setLastTouchDistance(0);
+  };
+
+  const resetZoomPan = () => {
+    setZoomPan(prev => ({
+      ...prev,
+      zoom: 1,
+      panX: 0,
+      panY: 0,
+    }));
+  };
+
+  const zoomIn = () => {
+    setZoomPan(prev => ({
+      ...prev,
+      zoom: Math.min(5, prev.zoom * 1.25),
+    }));
+  };
+
+  const zoomOut = () => {
+    setZoomPan(prev => ({
+      ...prev,
+      zoom: Math.max(0.1, prev.zoom / 1.25),
     }));
   };
 
@@ -269,18 +538,20 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
         alignItems: "center",
         justifyContent: "center",
         zIndex: 10000,
+        padding: "10px",
       }}
       onClick={onClose}
     >
       <div
         className="win99-window"
         style={{
-          width: isMobile ? "95vw" : "720px",
-          maxWidth: isMobile ? "95vw" : "720px",
-          maxHeight: isMobile ? "90vh" : "85vh",
-          minHeight: isMobile ? "80vh" : "400px",
+          width: "100%",
+          maxWidth: isMobile ? "100%" : "900px",
+          height: isMobile ? "100%" : "auto",
+          maxHeight: isMobile ? "100%" : "90vh",
           display: "flex",
           flexDirection: "column",
+          overflow: "hidden",
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -300,45 +571,47 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
           className="win99-content"
           style={{
             flex: 1,
-            display: "flex",
-            flexDirection: isMobile ? "column" : "row",
+            padding: isMobile ? "8px" : "12px",
+            overflow: "hidden",
+            display: isMobile ? "flex" : "grid",
+            flexDirection: isMobile ? "column" : undefined,
+            gridTemplateColumns: isMobile ? undefined : "220px 1fr",
+            gridTemplateRows: isMobile ? undefined : "1fr auto",
             gap: isMobile ? "8px" : "12px",
-            overflow: isMobile ? "auto" : "hidden",
             minHeight: 0,
           }}
         >
-          {/* Left Panel - Format & Quality */}
+          {/* Settings Panel */}
           <div
             style={{
-              width: isMobile ? "100%" : "200px",
               display: "flex",
-              flexDirection: "column",
-              minHeight: 0,
-              overflow: "hidden",
+              flexDirection: isMobile ? "column" : "column",
+              gap: isMobile ? "8px" : "8px",
+              gridColumn: isMobile ? undefined : "1",
+              gridRow: isMobile ? undefined : "1",
+              overflow: isMobile ? "auto" : "hidden",
+              flex: isMobile ? "0 0 auto" : undefined,
+              maxHeight: isMobile ? "40vh" : undefined,
             }}
           >
             {/* Format Selection */}
             <div
               className="win99-panel"
               style={{
-                marginBottom:
-                  settings.format === "jpeg" || settings.format === "webp"
-                    ? "6px"
-                    : "8px",
-                flexShrink: 0,
+                padding: isMobile ? "8px" : "10px",
               }}
             >
               <div
                 style={{
                   fontWeight: "bold",
-                  marginBottom: "6px",
-                  fontSize: "11px",
+                  marginBottom: "8px",
+                  fontSize: isMobile ? "12px" : "11px",
                 }}
               >
                 Format
               </div>
               <div
-                style={{ display: "flex", flexDirection: "column", gap: "3px" }}
+                style={{ display: "flex", flexDirection: isMobile ? "row" : "column", gap: "6px" }}
               >
                 {(["png", "jpeg", "webp"] as const).map((format) => (
                   <label
@@ -346,7 +619,9 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
                     style={{
                       display: "flex",
                       alignItems: "center",
-                      gap: "4px",
+                      gap: "6px",
+                      whiteSpace: "nowrap",
+                      flex: isMobile ? "1" : "0 0 auto",
                     }}
                   >
                     <input
@@ -357,7 +632,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
                       }
                     />
                     <span
-                      style={{ fontSize: "10px", textTransform: "uppercase" }}
+                      style={{ fontSize: isMobile ? "11px" : "10px", textTransform: "uppercase" }}
                     >
                       {format}
                     </span>
@@ -371,31 +646,31 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
               <div
                 className="win99-panel"
                 style={{
-                  marginBottom: "8px",
-                  flexShrink: 0,
+                  padding: isMobile ? "8px" : "10px",
                 }}
               >
                 <div
                   style={{
                     fontWeight: "bold",
-                    marginBottom: "6px",
-                    fontSize: "11px",
+                    marginBottom: "8px",
+                    fontSize: isMobile ? "12px" : "11px",
                   }}
                 >
-                  Compression
+                  Quality
                 </div>
 
                 <label
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: "4px",
-                    marginBottom: "6px",
+                    gap: "6px",
+                    marginBottom: "8px",
                   }}
                 >
                   <input
                     type="checkbox"
                     checked={settings.useTargetFileSize}
+                    disabled={baselineFileSize === 0}
                     onChange={(e) =>
                       setSettings((prev) => ({
                         ...prev,
@@ -403,19 +678,24 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
                       }))
                     }
                   />
-                  <span style={{ fontSize: "10px" }}>Target file size</span>
+                  <span style={{ 
+                    fontSize: isMobile ? "11px" : "10px",
+                    opacity: baselineFileSize === 0 ? 0.5 : 1 
+                  }}>
+                    Target file size{baselineFileSize === 0 ? " (processing...)" : ""}
+                  </span>
                 </label>
 
                 {settings.useTargetFileSize ? (
                   <div>
-                    <div style={{ fontSize: "10px", marginBottom: "4px" }}>
+                    <div style={{ fontSize: isMobile ? "11px" : "10px", marginBottom: "6px" }}>
                       Target: {settings.targetFileSizeKB} KB
                     </div>
                     <input
                       type="range"
-                      min="50"
-                      max="5000"
-                      value={settings.targetFileSizeKB}
+                      min="1"
+                      max={baselineFileSize > 0 ? baselineFileSize : 200}
+                      value={Math.min(settings.targetFileSizeKB, baselineFileSize > 0 ? baselineFileSize : 200)}
                       onChange={(e) =>
                         setSettings((prev) => ({
                           ...prev,
@@ -433,13 +713,13 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
                         color: "var(--text-secondary)",
                       }}
                     >
-                      <span>50 KB</span>
-                      <span>5 MB</span>
+                      <span>1 KB</span>
+                      <span>{baselineFileSize > 0 ? baselineFileSize : 200} KB</span>
                     </div>
                   </div>
                 ) : (
                   <div>
-                    <div style={{ fontSize: "10px", marginBottom: "4px" }}>
+                    <div style={{ fontSize: isMobile ? "11px" : "10px", marginBottom: "6px" }}>
                       Quality: {settings.quality}%
                     </div>
                     <input
@@ -461,25 +741,173 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
               </div>
             )}
 
-            {/* AI Enhancement Controls */}
-            {(settings.width > originalDimensions.width || settings.height > originalDimensions.height) && (
+            {/* Dimensions */}
+            <div
+              className="win99-panel"
+              style={{
+                padding: isMobile ? "8px" : "10px",
+              }}
+            >
+              <div
+                style={{
+                  fontWeight: "bold",
+                  marginBottom: "8px",
+                  fontSize: isMobile ? "12px" : "11px",
+                }}
+              >
+                Dimensions
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  gap: isMobile ? "12px" : "8px",
+                  alignItems: "center",
+                  marginBottom: "8px",
+                  flexWrap: "wrap",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                  <span style={{ fontSize: isMobile ? "11px" : "10px", minWidth: "16px" }}>W:</span>
+                  <input
+                    type="number"
+                    value={widthInput}
+                    onChange={(e) => handleDimensionChange("width", e.target.value)}
+                    className="win99-input"
+                    style={{ width: isMobile ? "80px" : "70px", fontSize: isMobile ? "11px" : "10px" }}
+                  />
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                  <span style={{ fontSize: isMobile ? "11px" : "10px", minWidth: "16px" }}>H:</span>
+                  <input
+                    type="number"
+                    value={heightInput}
+                    onChange={(e) => handleDimensionChange("height", e.target.value)}
+                    className="win99-input"
+                    style={{ width: isMobile ? "80px" : "70px", fontSize: isMobile ? "11px" : "10px" }}
+                  />
+                </div>
+              </div>
+
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  marginBottom: "8px",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={settings.maintainAspectRatio}
+                  onChange={(e) =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      maintainAspectRatio: e.target.checked,
+                    }))
+                  }
+                />
+                <span style={{ fontSize: isMobile ? "11px" : "10px" }}>Maintain aspect ratio</span>
+              </label>
+
+              <div
+                className="win99-button"
+                onClick={resetToOriginal}
+                style={{
+                  fontSize: isMobile ? "11px" : "10px",
+                  padding: isMobile ? "6px 12px" : "4px 8px",
+                  width: "100%",
+                  textAlign: "center",
+                  marginBottom: "8px",
+                }}
+              >
+                Reset to Original
+              </div>
+
+              <div style={{ fontSize: "9px", color: "var(--text-secondary)" }}>
+                <div>Original: {originalDimensions.width}×{originalDimensions.height}</div>
+                <div>Current: {settings.width}×{settings.height}</div>
+              </div>
+            </div>
+
+            {/* Presets - Always visible on desktop, mobile only when needed */}
+            {(!isMobile || (isMobile && settings.width > 0 && settings.height > 0)) && (
               <div
                 className="win99-panel"
                 style={{
-                  marginBottom: "8px",
-                  flexShrink: 0,
+                  padding: isMobile ? "8px" : "10px",
                 }}
               >
                 <div
                   style={{
                     fontWeight: "bold",
-                    marginBottom: "6px",
-                    fontSize: "11px",
+                    marginBottom: "8px",
+                    fontSize: isMobile ? "12px" : "11px",
+                  }}
+                >
+                  Presets
+                </div>
+                                 <div
+                   style={{
+                     display: "grid",
+                     gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr",
+                     gap: "4px",
+                     maxHeight: isMobile ? "none" : "200px",
+                     overflowY: isMobile ? "visible" : "auto",
+                   }}
+                 >
+                  {presetSizes.map((preset) => (
+                    <div
+                      key={preset.name}
+                      className="win99-button"
+                      onClick={() => {
+                        setSettings((prev) => ({
+                          ...prev,
+                          width: preset.width,
+                          height: preset.height,
+                        }));
+                        setWidthInput(preset.width.toString());
+                        setHeightInput(preset.height.toString());
+                      }}
+                      style={{
+                        fontSize: isMobile ? "10px" : "9px",
+                        padding: isMobile ? "8px 6px" : "6px 4px",
+                        textAlign: "center",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        minHeight: isMobile ? "50px" : "32px",
+                      }}
+                    >
+                      <div style={{ fontWeight: "bold", marginBottom: "2px" }}>
+                        {preset.name}
+                      </div>
+                      <div style={{ fontSize: "8px", opacity: 0.7 }}>
+                        {preset.width}×{preset.height}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* AI Enhancement - conditionally shown */}
+            {(settings.width > originalDimensions.width || settings.height > originalDimensions.height) && (
+              <div
+                className="win99-panel"
+                style={{
+                  padding: isMobile ? "8px" : "10px",
+                }}
+              >
+                <div
+                  style={{
+                    fontWeight: "bold",
+                    marginBottom: "8px",
+                    fontSize: isMobile ? "12px" : "11px",
                   }}
                 >
                   AI Enhancement
                   <span style={{ fontSize: "9px", fontWeight: "normal", marginLeft: "4px", opacity: 0.7 }}>
-                    (when enlarging)
+                    (for upscaling)
                   </span>
                 </div>
 
@@ -487,8 +915,8 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: "4px",
-                    marginBottom: "6px",
+                    gap: "6px",
+                    marginBottom: "8px",
                   }}
                 >
                   <input
@@ -501,15 +929,12 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
                       }))
                     }
                   />
-                  <span style={{ fontSize: "10px" }}>Enable AI upscaling</span>
+                  <span style={{ fontSize: isMobile ? "11px" : "10px" }}>Enable AI upscaling</span>
                 </label>
-                <div style={{ fontSize: "9px", opacity: 0.7, marginTop: "2px" }}>
-                  Uses advanced algorithms to improve image quality when enlarging
-                </div>
 
                 {settings.useAIEnhancement && (
                   <div>
-                    <div style={{ fontSize: "10px", marginBottom: "4px" }}>
+                    <div style={{ fontSize: isMobile ? "11px" : "10px", marginBottom: "6px" }}>
                       Method: {settings.upscalingMethod}
                       {isAIProcessing && (
                         <span style={{ color: "var(--accent-color)", marginLeft: "4px" }}>
@@ -527,8 +952,8 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
                       }
                       style={{
                         width: "100%",
-                        fontSize: "9px",
-                        padding: "2px 4px",
+                        fontSize: isMobile ? "11px" : "10px",
+                        padding: "4px 6px",
                         border: "1px inset var(--border-window)",
                         background: "var(--bg-content)",
                         color: "var(--text-primary)",
@@ -543,369 +968,216 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
                 )}
               </div>
             )}
-
-            {/* Preset Sizes */}
-            <div
-              className="win99-panel"
-              style={{
-                flex: 1,
-                minHeight: 0,
-                overflow: "hidden",
-                display: "flex",
-                flexDirection: "column",
-                marginTop: "auto",
-              }}
-            >
-              <div
-                style={{
-                  fontWeight: "bold",
-                  marginBottom: "6px",
-                  fontSize: "11px",
-                }}
-              >
-                Presets
-              </div>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr",
-                  gap: "2px",
-                  flex: 1,
-                  overflowY: "auto",
-                  minHeight: 0,
-                }}
-              >
-                {presetSizes.map((preset) => (
-                  <div
-                    key={preset.name}
-                    className="win99-button"
-                    onClick={() =>
-                      setSettings((prev) => ({
-                        ...prev,
-                        width: preset.width,
-                        height: preset.height,
-                      }))
-                    }
-                    style={{
-                      fontSize: "9px",
-                      padding: "4px 6px",
-                      height: "24px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      minHeight: "24px",
-                      maxHeight: "24px",
-                    }}
-                  >
-                    <span
-                      style={{
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        flex: 1,
-                      }}
-                    >
-                      {preset.name}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: "8px",
-                        color: "var(--text-secondary)",
-                        flexShrink: 0,
-                        marginLeft: "4px",
-                      }}
-                    >
-                      {preset.width}×{preset.height}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
 
-          {/* Middle Panel - Output Size */}
+          {/* Preview Section */}
           <div
             style={{
-              width: isMobile ? "100%" : "200px",
+              gridColumn: isMobile ? undefined : "2",
+              gridRow: isMobile ? undefined : "1",
               display: "flex",
               flexDirection: "column",
-              minHeight: 0,
               overflow: "hidden",
+              flex: isMobile ? "1 1 auto" : undefined,
+              minHeight: isMobile ? "200px" : "300px",
             }}
           >
-            <div className="win99-panel" style={{ flex: 1 }}>
-              <div
-                style={{
-                  fontWeight: "bold",
-                  marginBottom: "6px",
-                  fontSize: "11px",
-                }}
-              >
-                Output Size
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  gap: "8px",
-                  alignItems: "center",
-                  marginBottom: "8px",
-                }}
-              >
+            <div
+              style={{
+                fontWeight: "bold",
+                marginBottom: isMobile ? "4px" : "8px",
+                fontSize: isMobile ? "12px" : "11px",
+                padding: "0 4px",
+              }}
+            >
+              Preview
+            </div>
+            
+            <div
+              ref={previewContainerRef}
+              className="win99-sunken"
+              style={{
+                flex: 1,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                overflow: "hidden",
+                cursor: zoomPan.isDragging ? "grabbing" : "grab",
+                position: "relative",
+                touchAction: "none",
+                marginBottom: isMobile ? "6px" : "8px",
+                minHeight: isMobile ? "150px" : "200px",
+              }}
+              onWheel={handleWheel}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+              onTouchCancel={handleTouchEnd}
+            >
+              {isProcessing ? (
                 <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "4px",
-                  }}
+                  style={{ fontSize: isMobile ? "11px" : "10px", color: "var(--text-secondary)" }}
                 >
-                  <span style={{ fontSize: "10px", minWidth: "20px" }}>W:</span>
-                  <input
-                    type="number"
-                    value={settings.width}
-                    onChange={(e) =>
-                      handleDimensionChange(
-                        "width",
-                        parseInt(e.target.value) || 0
-                      )
-                    }
-                    className="win99-input"
-                    style={{ width: "70px", fontSize: "10px" }}
-                  />
+                  Processing...
+                  {settings.useTargetFileSize && settings.targetFileSizeKB <= 10 && (
+                    <div style={{ fontSize: "9px", marginTop: "4px", opacity: 0.8 }}>
+                      Applying extreme compression
+                    </div>
+                  )}
                 </div>
-                <div
+              ) : previewData ? (
+                <img
+                  src={previewData}
+                  alt="Preview"
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "4px",
+                    transform: `translate(${zoomPan.panX}px, ${zoomPan.panY}px) scale(${zoomPan.zoom})`,
+                    transition: zoomPan.isDragging ? "none" : "transform 0.1s ease-out",
+                    maxWidth: "100%",
+                    maxHeight: "100%",
+                    objectFit: "contain",
+                    userSelect: "none",
+                    pointerEvents: "none",
                   }}
-                >
-                  <span style={{ fontSize: "10px", minWidth: "20px" }}>H:</span>
-                  <input
-                    type="number"
-                    value={settings.height}
-                    onChange={(e) =>
-                      handleDimensionChange(
-                        "height",
-                        parseInt(e.target.value) || 0
-                      )
-                    }
-                    className="win99-input"
-                    style={{ width: "70px", fontSize: "10px" }}
-                  />
-                </div>
-              </div>
-
-              <label
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "4px",
-                  marginBottom: "8px",
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={settings.maintainAspectRatio}
-                  onChange={(e) =>
-                    setSettings((prev) => ({
-                      ...prev,
-                      maintainAspectRatio: e.target.checked,
-                    }))
-                  }
                 />
-                <span style={{ fontSize: "10px" }}>Maintain aspect ratio</span>
-              </label>
+              ) : (
+                <div
+                  style={{ fontSize: isMobile ? "11px" : "10px", color: "var(--text-secondary)" }}
+                >
+                  No preview
+                </div>
+              )}
+            </div>
 
+            {/* Zoom Controls */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: isMobile ? "4px" : "6px",
+                marginBottom: isMobile ? "4px" : "8px",
+              }}
+            >
               <div
                 className="win99-button"
-                onClick={resetToOriginal}
+                onClick={zoomOut}
                 style={{
-                  fontSize: "10px",
-                  padding: "4px 8px",
-                  marginBottom: "8px",
+                  padding: isMobile ? "8px 12px" : "6px 10px",
+                  fontSize: isMobile ? "12px" : "10px",
+                  minWidth: isMobile ? "32px" : "28px",
                 }}
               >
-                Reset to Original
+                −
               </div>
-
-              <div style={{ fontSize: "9px", color: "var(--text-secondary)" }}>
-                <div>
-                  Original: {originalDimensions.width}×
-                  {originalDimensions.height}
-                </div>
-                <div>
-                  Current: {settings.width}×{settings.height}
-                </div>
+              <div
+                className="win99-button"
+                onClick={resetZoomPan}
+                style={{
+                  padding: isMobile ? "8px 12px" : "6px 10px",
+                  fontSize: isMobile ? "11px" : "9px",
+                  minWidth: isMobile ? "60px" : "50px",
+                }}
+              >
+                {Math.round(zoomPan.zoom * 100)}%
+              </div>
+              <div
+                className="win99-button"
+                onClick={zoomIn}
+                style={{
+                  padding: isMobile ? "8px 12px" : "6px 10px",
+                  fontSize: isMobile ? "12px" : "10px",
+                  minWidth: isMobile ? "32px" : "28px",
+                }}
+              >
+                +
               </div>
             </div>
           </div>
 
-          {/* Right Panel - Preview */}
+          {/* Info Panel */}
           <div
             style={{
-              width: isMobile ? "100%" : "240px",
+              gridColumn: isMobile ? undefined : "1 / -1",
+              gridRow: isMobile ? undefined : "2",
               display: "flex",
-              flexDirection: "column",
-              minHeight: 0,
-              overflow: "hidden",
+              flexDirection: isMobile ? "column" : "row",
+              gap: "8px",
+              alignItems: isMobile ? "stretch" : "center",
+              justifyContent: "space-between",
+              padding: isMobile ? "8px" : "10px",
+              background: "var(--bg-content)",
+              border: "1px inset var(--border-window)",
+              fontSize: isMobile ? "11px" : "10px",
+              flex: isMobile ? "0 0 auto" : undefined,
             }}
           >
+            <div style={{ display: "flex", gap: isMobile ? "8px" : "12px", flexWrap: "wrap" }}>
+              <div>
+                <strong>Format:</strong> {settings.format.toUpperCase()}
+              </div>
+              <div>
+                <strong>Size:</strong> {settings.width}×{settings.height}
+              </div>
+              <div>
+                <strong>File Size:</strong> ~{fileSize} KB
+              </div>
+              {settings.useTargetFileSize && (
+                <div
+                  style={{
+                    color: fileSize <= settings.targetFileSizeKB ? "var(--text-primary)" : 
+                           fileSize > settings.targetFileSizeKB * 2 ? "red" : "orange",
+                  }}
+                >
+                  <strong>Target:</strong> {settings.targetFileSizeKB} KB
+                  {settings.targetFileSizeKB <= 10 && (
+                    <span style={{ fontSize: "9px", marginLeft: "4px", opacity: 0.8 }}>
+                      (extreme compression)
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Export Buttons */}
             <div
-              className="win99-panel"
               style={{
-                flex: 1,
                 display: "flex",
-                flexDirection: "column",
-                minHeight: 0,
-                overflow: "hidden",
+                gap: "8px",
+                flexShrink: 0,
+                justifyContent: isMobile ? "center" : "flex-end",
               }}
             >
-              <div
+              <div 
+                className="win99-button" 
+                onClick={onClose}
                 style={{
+                  padding: isMobile ? "12px 20px" : "8px 16px",
+                  fontSize: isMobile ? "12px" : "11px",
+                  minWidth: isMobile ? "100px" : "80px",
+                }}
+              >
+                Cancel
+              </div>
+              <div
+                className="win99-button"
+                onClick={previewData ? handleExport : undefined}
+                style={{
+                  background: previewData ? "var(--bg-button-hover)" : "var(--bg-window)",
                   fontWeight: "bold",
-                  marginBottom: "6px",
-                  fontSize: "11px",
+                  opacity: previewData ? 1 : 0.5,
+                  cursor: previewData ? "pointer" : "not-allowed",
+                  padding: isMobile ? "12px 20px" : "8px 16px",
+                  fontSize: isMobile ? "12px" : "11px",
+                  minWidth: isMobile ? "100px" : "80px",
                 }}
               >
-                Preview
-              </div>
-              <div
-                className="win99-sunken"
-                style={{
-                  flex: 1,
-                  minHeight: "120px",
-                  maxHeight: "200px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  marginBottom: "8px",
-                  overflow: "hidden",
-                }}
-              >
-                {isProcessing ? (
-                  <div
-                    style={{ fontSize: "10px", color: "var(--text-secondary)" }}
-                  >
-                    Processing...
-                  </div>
-                ) : previewData ? (
-                  <img
-                    src={previewData}
-                    alt="Preview"
-                    style={{
-                      maxWidth: "100%",
-                      maxHeight: "100%",
-                      objectFit: "contain",
-                    }}
-                  />
-                ) : (
-                  <div
-                    style={{ fontSize: "10px", color: "var(--text-secondary)" }}
-                  >
-                    No preview
-                  </div>
-                )}
-              </div>
-
-              <div
-                style={{
-                  fontSize: "9px",
-                  color: "var(--text-secondary)",
-                  marginTop: "auto",
-                  paddingTop: "4px",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    marginBottom: "1px",
-                  }}
-                >
-                  <span>File Size:</span>
-                  <span style={{ fontWeight: "bold" }}>~{fileSize} KB</span>
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    marginBottom: "1px",
-                  }}
-                >
-                  <span>Dimensions:</span>
-                  <span>
-                    {settings.width}×{settings.height}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    marginBottom: "1px",
-                  }}
-                >
-                  <span>Format:</span>
-                  <span>{settings.format.toUpperCase()}</span>
-                </div>
-                {settings.useTargetFileSize && (
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      marginBottom: "1px",
-                      color:
-                        fileSize <= settings.targetFileSizeKB
-                          ? "var(--text-primary)"
-                          : "var(--text-secondary)",
-                    }}
-                  >
-                    <span>Target:</span>
-                    <span>{settings.targetFileSizeKB} KB</span>
-                  </div>
-                )}
+                💿 Export
               </div>
             </div>
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div
-          style={{
-            padding: "8px",
-            borderTop: "1px solid var(--border-sunken)",
-            display: "flex",
-            justifyContent: isMobile ? "stretch" : "flex-end",
-            gap: "8px",
-            flexDirection: isMobile ? "column" : "row",
-          }}
-        >
-          <div 
-            className="win99-button" 
-            onClick={onClose}
-            style={{
-              padding: isMobile ? "12px" : "8px",
-              fontSize: isMobile ? "14px" : "11px",
-              minHeight: isMobile ? "44px" : "auto",
-            }}
-          >
-            Cancel
-          </div>
-          <div
-            className="win99-button"
-            onClick={previewData ? handleExport : undefined}
-            style={{
-              background: previewData
-                ? "var(--bg-button-hover)"
-                : "var(--bg-window)",
-              fontWeight: "bold",
-              opacity: previewData ? 1 : 0.5,
-              cursor: previewData ? "pointer" : "not-allowed",
-              padding: isMobile ? "12px" : "8px",
-              fontSize: isMobile ? "14px" : "11px",
-              minHeight: isMobile ? "44px" : "auto",
-            }}
-          >
-            💿 Export
           </div>
         </div>
 
@@ -915,3 +1187,4 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
     </div>
   );
 };
+

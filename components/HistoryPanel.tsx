@@ -10,15 +10,17 @@ interface HistoryItem {
 interface HistoryPanelProps {
   history: HistoryItem[];
   onHistoryItemSelect: (item: HistoryItem) => void;
-  onRemoveHistoryItem: (itemId: string) => void;
   onClearHistory: () => void;
+  isSelecting?: boolean;
+  currentHistoryIndex?: number;
 }
 
 export const HistoryPanel: React.FC<HistoryPanelProps> = ({
   history,
   onHistoryItemSelect,
-  onRemoveHistoryItem,
   onClearHistory,
+  isSelecting = false,
+  currentHistoryIndex = -1,
 }) => {
   const formatTime = (timestamp: number) => {
     return new Date(timestamp).toLocaleTimeString("en-US", {
@@ -94,6 +96,23 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
           <div style={{ fontWeight: "bold" }}>No history</div>
         </div>
       ) : (
+        <>
+          {isSelecting && (
+            <div
+              style={{
+                padding: "8px",
+                textAlign: "center",
+                fontSize: "10px",
+                color: "#4080ff",
+                fontWeight: "bold",
+                background: "#f0f8ff",
+                border: "1px solid #4080ff",
+                marginBottom: "8px",
+              }}
+            >
+              ⏳ Loading selected state...
+            </div>
+          )}
         <div
           className="win99-sunken win99-scrollbar"
           style={{
@@ -117,9 +136,30 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
                 alignItems: "center",
                 gap: "8px",
                 background:
-                  index === history.length - 1 ? "#f0f8ff" : "transparent",
+                  index === currentHistoryIndex ? "#f0f8ff" : "transparent",
+                transition: "background-color 0.2s ease",
               }}
               className="win99-history-item"
+              onMouseEnter={(e) => {
+                if (index !== currentHistoryIndex) {
+                  e.currentTarget.style.backgroundColor = "#f0f0f0";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (index !== currentHistoryIndex) {
+                  e.currentTarget.style.backgroundColor = "transparent";
+                }
+              }}
+              onTouchStart={(e) => {
+                if (index !== currentHistoryIndex) {
+                  e.currentTarget.style.backgroundColor = "#e0e0e0";
+                }
+              }}
+              onTouchEnd={(e) => {
+                if (index !== currentHistoryIndex) {
+                  e.currentTarget.style.backgroundColor = "transparent";
+                }
+              }}
             >
               {/* Icon */}
               <div style={{ fontSize: "16px" }}>
@@ -149,7 +189,7 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
               </div>
 
               {/* Current indicator */}
-              {index === history.length - 1 && (
+              {index === currentHistoryIndex && (
                 <div
                   style={{
                     fontSize: "8px",
@@ -164,34 +204,11 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
                 </div>
               )}
 
-              {/* Remove button */}
-              {item.effectName !== "Original" && (
-                <div
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRemoveHistoryItem(item.id);
-                  }}
-                  style={{
-                    width: "14px",
-                    height: "14px",
-                    background: "#ff6b6b",
-                    border: "1px outset #ff6b6b",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    cursor: "pointer",
-                    fontSize: "8px",
-                    color: "#ffffff",
-                    fontWeight: "bold",
-                  }}
-                  title="Remove from history"
-                >
-                  ✕
-                </div>
-              )}
+
             </div>
           ))}
         </div>
+        </>
       )}
     </div>
   );

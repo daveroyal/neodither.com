@@ -80,12 +80,43 @@
     font-size: 11px;
     color: var(--text-primary);
     overflow-x: hidden;
+    /* Prevent browser zooming */
+    touch-action: manipulation;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
   }
 
   #root {
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+  }
+
+  /* Prevent browser zooming on specific elements */
+  .prevent-zoom {
+    touch-action: manipulation;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Ensure zoom controls work properly */
+  .preview-zoom-container {
+    overflow: hidden;
+    position: relative;
+  }
+
+  .preview-zoom-image {
+    transition: transform 0.1s ease;
+    /* Ensure zoom works with flexbox */
+    flex-shrink: 0;
+    flex-grow: 0;
+    /* Prevent flex from constraining the image */
+    flex-basis: auto;
   }
 }
 

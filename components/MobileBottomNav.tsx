@@ -6,6 +6,7 @@ interface MobileBottomNavProps {
   onChange: (view: "canvas" | "effects" | "layers" | "history") => void;
   onExport: () => void;
   hasImage?: boolean;
+  historyCount?: number;
 }
 
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
@@ -13,6 +14,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   onChange,
   onExport,
   hasImage = false,
+  historyCount = 0,
 }) => {
   const isMobile = useIsMobile();
   if (!isMobile) return null;
@@ -51,7 +53,30 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         onClick={() => onChange("history")}
         title="History"
       >
-        <span className="win98-toolbar-icon">📜</span>
+        <span className="win98-toolbar-icon" style={{ position: "relative" }}>
+          📜
+          {historyCount > 0 && (
+            <span
+              style={{
+                position: "absolute",
+                top: "-4px",
+                right: "-4px",
+                background: "#4080ff",
+                color: "#ffffff",
+                fontSize: "8px",
+                fontWeight: "bold",
+                padding: "1px 4px",
+                borderRadius: "8px",
+                minWidth: "12px",
+                textAlign: "center",
+                lineHeight: "1",
+                border: "1px solid #ffffff",
+              }}
+            >
+              {historyCount}
+            </span>
+          )}
+        </span>
         <span className="win98-toolbar-text">History</span>
       </button>
       <button

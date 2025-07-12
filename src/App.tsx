@@ -9,11 +9,55 @@ import { Canvas } from "../components/Canvas";
 import { Wallpaper } from "../components/Wallpaper";
 import { ExportDialog } from "../components/ExportDialog";
 
+// Enhanced History System with backward compatibility
 interface HistoryItem {
   id: string;
   imageData: string;
   timestamp: number;
   effectName?: string;
+  layerOrder?: number;
+  
+  // Enhanced tracking - new fields for robust history
+  type?: 'base_image' | 'layer_effect' | 'layer_property' | 'layer_reorder' | 'layer_remove' | 'layer_add';
+  description?: string;
+  
+  // Layer operation data
+  layerData?: {
+    id: string;
+    imageData: string;
+    name: string;
+    visible: boolean;
+    locked: boolean;
+    opacity: number;
+    blendMode: string;
+    effectType?: string;
+    effectParams?: Record<string, number | string>;
+  };
+  
+  // For layer reordering
+  reorderData?: {
+    fromIndex: number;
+    toIndex: number;
+    layerId: string;
+    layerName: string;
+  };
+  
+  // For layer property changes
+  propertyChanges?: {
+    layerId: string;
+    layerName: string;
+    oldValues: Partial<Layer>;
+    newValues: Partial<Layer>;
+  };
+  
+  // For operations with parameters (crop, rotate, effects)
+  operationParams?: Record<string, any>;
+  
+  // Complete state snapshot for complex operations
+  stateSnapshot?: {
+    baseImage: string;
+    layers: Layer[];
+  };
 }
 
 interface Layer {
@@ -31,6 +75,7 @@ interface Layer {
 function App() {
   const [baseImage, setBaseImage] = useState<string | null>(null); // Original uploaded image
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [currentHistoryIndex, setCurrentHistoryIndex] = useState<number>(-1);
   const [layers, setLayers] = useState<Layer[]>([]);
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
   const [currentTool, setCurrentTool] = useState<string>("upload");
@@ -57,6 +102,153 @@ function App() {
     "minimize" | "restore" | "close" | null
   >(null);
   const [showExportDialog, setShowExportDialog] = useState(false);
+  const [isHistorySelecting, setIsHistorySelecting] = useState(false);
+
+  // Enhanced History Management System
+  const addHistoryItem = useCallback((historyItem: Partial<HistoryItem>) => {
+    const newItem: HistoryItem = {
+      id: Date.now().toString(),
+      imageData: historyItem.imageData || baseImage || '',
+      timestamp: Date.now(),
+      type: historyItem.type || 'base_image',
+      description: historyItem.description || 'Unknown operation',
+      ...historyItem,
+    };
+    
+    setHistory(prev => {
+      // If we're not at the latest state, truncate history to create a new branch
+      const truncatedHistory = currentHistoryIndex < prev.length - 1 
+        ? prev.slice(0, currentHistoryIndex + 1)
+        : prev;
+      
+      const newHistory = [...truncatedHistory, newItem];
+      setCurrentHistoryIndex(newHistory.length - 1);
+      return newHistory;
+    });
+    return newItem;
+  }, [baseImage, currentHistoryIndex]);
+
+  const trackLayerReorder = useCallback((fromIndex: number, toIndex: number, layerId: string) => {
+    const layer = layers.find(l => l.id === layerId);
+    if (!layer) return;
+    
+    addHistoryItem({
+      type: 'layer_reorder',
+      description: `Moved "${layer.name}" from position ${fromIndex + 1} to ${toIndex + 1}`,
+      reorderData: {
+        fromIndex,
+        toIndex,
+        layerId,
+        layerName: layer.name,
+      },
+      stateSnapshot: {
+        baseImage: baseImage!,
+        layers: [...layers],
+      },
+    });
+  }, [layers, baseImage, addHistoryItem]);
+
+  const trackLayerPropertyChange = useCallback((layerId: string, oldValues: Partial<Layer>, newValues: Partial<Layer>) => {
+    const layer = layers.find(l => l.id === layerId);
+    if (!layer) return;
+    
+    const changes = Object.keys(newValues).map(key => {
+      const k = key as keyof Layer;
+      return `${key}: ${oldValues[k]} → ${newValues[k]}`;
+    }).join(', ');
+    
+    addHistoryItem({
+      type: 'layer_property',
+      description: `Changed ${layer.name} properties: ${changes}`,
+      propertyChanges: {
+        layerId,
+        layerName: layer.name,
+        oldValues,
+        newValues,
+      },
+      stateSnapshot: {
+        baseImage: baseImage!,
+        layers: [...layers],
+      },
+    });
+  }, [layers, baseImage, addHistoryItem]);
+
+  const trackLayerRemove = useCallback((layerId: string) => {
+    const layer = layers.find(l => l.id === layerId);
+    if (!layer) return;
+    
+    addHistoryItem({
+      type: 'layer_remove',
+      description: `Removed layer "${layer.name}"`,
+      layerData: { ...layer },
+      stateSnapshot: {
+        baseImage: baseImage!,
+        layers: [...layers],
+      },
+    });
+  }, [layers, baseImage, addHistoryItem]);
+
+  const trackLayerAdd = useCallback((layer: Layer) => {
+    addHistoryItem({
+      type: 'layer_add',
+      description: `Added layer "${layer.name}"`,
+      layerData: { ...layer },
+      stateSnapshot: {
+        baseImage: baseImage!,
+        layers: [...layers],
+      },
+    });
+  }, [layers, baseImage, addHistoryItem]);
+
+  // Enhanced undo/redo functionality
+  const canUndo = useMemo(() => currentHistoryIndex > 0, [currentHistoryIndex]);
+  const canRedo = useMemo(() => currentHistoryIndex < history.length - 1, [currentHistoryIndex, history.length]);
+
+  const performUndo = useCallback(() => {
+    if (!canUndo) return;
+    
+    const previousIndex = currentHistoryIndex - 1;
+    const targetItem = history[previousIndex];
+    
+    if (targetItem.stateSnapshot) {
+      // Restore from complete state snapshot
+      setBaseImage(targetItem.stateSnapshot.baseImage);
+      setLayers(targetItem.stateSnapshot.layers);
+    }
+    
+    setCurrentHistoryIndex(previousIndex);
+  }, [canUndo, currentHistoryIndex, history]);
+
+  const performRedo = useCallback(() => {
+    if (!canRedo) return;
+    
+    const nextIndex = currentHistoryIndex + 1;
+    const targetItem = history[nextIndex];
+    
+    if (targetItem.stateSnapshot) {
+      // Restore from complete state snapshot
+      setBaseImage(targetItem.stateSnapshot.baseImage);
+      setLayers(targetItem.stateSnapshot.layers);
+    }
+    
+    setCurrentHistoryIndex(nextIndex);
+  }, [canRedo, currentHistoryIndex, history]);
+
+  // Keyboard shortcuts for undo/redo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        performUndo();
+      } else if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        performRedo();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [performUndo, performRedo]);
 
   // Update time every minute
   React.useEffect(() => {
@@ -297,15 +489,19 @@ function App() {
         setLayers((prev) => [newLayer, ...prev]); // Add to beginning so it appears on top
         setSelectedLayerId(newLayer.id); // Auto-select the new layer
 
-        // Add to history
-        const newHistoryItem: HistoryItem = {
-          id: Date.now().toString(),
+        // Add to history with proper tracking
+        addHistoryItem({
+          type: 'layer_effect',
           imageData: previewImage,
-          timestamp: Date.now(),
           effectName: previewEffectName,
-        };
-
-        setHistory((prev) => [...prev, newHistoryItem]);
+          description: `Applied ${previewEffectName} effect`,
+          layerData: { ...newLayer },
+          operationParams: currentEffectParams,
+          stateSnapshot: {
+            baseImage: baseImage!,
+            layers: [newLayer, ...layers],
+          },
+        });
       }
     }
 
@@ -367,28 +563,37 @@ function App() {
         setSelectedLayerId(null);
         const firstHistoryItem: HistoryItem = {
           id: "original",
+          type: 'base_image',
           imageData,
           timestamp: Date.now(),
           effectName: "Original",
+          description: "Original image uploaded",
         };
         setHistory([firstHistoryItem]);
+        setCurrentHistoryIndex(0);
       } else {
         // This is a base image modification (crop, rotate, etc.)
         setBaseImage(imageData);
-        const newHistoryItem: HistoryItem = {
-          id: Date.now().toString(),
+        
+        addHistoryItem({
+          type: 'base_image',
           imageData,
-          timestamp: Date.now(),
           effectName,
-        };
-        setHistory((prev) => [...prev, newHistoryItem]);
+          description: `${effectName} applied to base image`,
+          stateSnapshot: {
+            baseImage: imageData,
+            layers: [...layers],
+          },
+        });
       }
     },
-    []
+    [layers, addHistoryItem]
   );
 
   const handleHistoryItemSelect = useCallback(
     (item: HistoryItem) => {
+      setIsHistorySelecting(true);
+      
       const itemIndex = history.findIndex((h) => h.id === item.id);
 
       if (itemIndex === 0) {
@@ -400,81 +605,71 @@ function App() {
         // Rebuild the state up to the selected history point
         const historyUpToPoint = history.slice(0, itemIndex + 1);
 
-        // Find the last base image modification in the history up to this point
-        const baseImageHistory = historyUpToPoint.filter(
-          (h) =>
-            h.effectName === "Original" ||
-            ["Cropped", "Rotated"].includes(h.effectName || "")
-        );
-        const lastBaseImage = baseImageHistory[baseImageHistory.length - 1];
-
-        if (lastBaseImage) {
-          setBaseImage(lastBaseImage.imageData);
-        }
-
-        // Rebuild layers from effects applied after the last base image modification
-        const lastBaseImageIndex = historyUpToPoint.findIndex(
-          (h) => h.id === lastBaseImage?.id
-        );
-        const effectsHistory = historyUpToPoint.slice(lastBaseImageIndex + 1);
-
-        // Create layers from the effects in history
-        const newLayers: Layer[] = effectsHistory
-          .filter(
+        // Check if we have state snapshots for instant restoration
+        if (item.stateSnapshot) {
+          setBaseImage(item.stateSnapshot.baseImage);
+          setLayers(item.stateSnapshot.layers);
+          setSelectedLayerId(null);
+        } else {
+          // Fallback to reconstruction for older history items
+          // Find the last base image modification in the history up to this point
+          const baseImageHistory = historyUpToPoint.filter(
             (h) =>
-              h.effectName && !["Cropped", "Rotated"].includes(h.effectName)
-          )
-          .map((h, index) => ({
-            id: h.id,
-            imageData: h.imageData,
-            name: h.effectName || `Effect ${index + 1}`,
-            visible: true,
-            locked: false,
-            opacity: 100,
-            blendMode: "normal",
-            effectType: getEffectTypeFromName(h.effectName || ""),
-            effectParams: {},
-          }));
-
-        setLayers(newLayers);
-        setSelectedLayerId(null);
-      }
-    },
-    [history]
-  );
-
-  const handleRemoveHistoryItem = useCallback(
-    (itemId: string) => {
-      const item = history.find((h) => h.id === itemId);
-
-      if (item && item.effectName !== "Original") {
-        // Remove from history
-        setHistory((prev) =>
-          prev.filter((historyItem) => historyItem.id !== itemId)
-        );
-
-        // If it's a layer effect, remove the corresponding layer
-        if (
-          item.effectName &&
-          !["Cropped", "Rotated"].includes(item.effectName)
-        ) {
-          const layerToRemove = layers.find(
-            (layer) => layer.name === item.effectName
+              h.effectName === "Original" || 
+              ["Cropped", "Rotated"].includes(h.effectName || "")
           );
-          if (layerToRemove) {
-            setLayers((prev) =>
-              prev.filter((layer) => layer.name !== item.effectName)
-            );
-            // Clear selection if we're removing the selected layer
-            if (selectedLayerId === layerToRemove.id) {
-              setSelectedLayerId(null);
-            }
+          const lastBaseImage = baseImageHistory[baseImageHistory.length - 1];
+
+          if (lastBaseImage && lastBaseImage.imageData) {
+            setBaseImage(lastBaseImage.imageData);
           }
+
+          // Rebuild layers from effects applied after the last base image modification
+          const lastBaseImageIndex = historyUpToPoint.findIndex(
+            (h) => h.id === lastBaseImage?.id
+          );
+          const effectsHistory = historyUpToPoint.slice(lastBaseImageIndex + 1);
+
+          // Create layers from the effects in history
+          const layerEffects = effectsHistory.filter(
+            (h) => (h.type === 'layer_effect' || (h.effectName && !["Cropped", "Rotated", "Original"].includes(h.effectName)))
+          );
+          
+          // Build layers array in correct order (newer effects on top)
+          const newLayers: Layer[] = layerEffects.map((h, index) => ({
+            id: h.layerData?.id || h.id,
+            imageData: h.layerData?.imageData || h.imageData,
+            name: h.layerData?.name || h.effectName || "Effect",
+            visible: h.layerData?.visible ?? true,
+            locked: h.layerData?.locked ?? false,
+            opacity: h.layerData?.opacity ?? 100,
+            blendMode: h.layerData?.blendMode || "normal",
+            effectType: h.layerData?.effectType || getEffectTypeFromName(h.effectName || ""),
+            effectParams: h.layerData?.effectParams || h.operationParams || {},
+          })).reverse(); // Reverse to get newest on top
+
+          setLayers(newLayers);
+          setSelectedLayerId(null);
         }
       }
+
+      // Set the current history index to the selected item
+      setCurrentHistoryIndex(itemIndex);
+
+      // On mobile, navigate back to canvas after selecting a history item
+      if (isMobile && mobileView === "history") {
+        setMobileView("canvas");
+      }
+
+      // Clear the loading state after a short delay
+      setTimeout(() => {
+        setIsHistorySelecting(false);
+      }, 500);
     },
-    [history, layers, selectedLayerId]
+    [history, isMobile, mobileView]
   );
+
+
 
   const handleClearHistory = useCallback(() => {
     if (history.length > 1) {
@@ -489,13 +684,26 @@ function App() {
   // Layer management handlers
   const handleLayerUpdate = useCallback(
     (layerId: string, updates: Partial<Layer>) => {
+      const currentLayer = layers.find(l => l.id === layerId);
+      if (!currentLayer) return;
+      
+      // Extract old values for tracking
+      const oldValues: Partial<Layer> = {};
+      Object.keys(updates).forEach(key => {
+        const k = key as keyof Layer;
+        (oldValues as any)[k] = currentLayer[k];
+      });
+      
+      // Track the property change
+      trackLayerPropertyChange(layerId, oldValues, updates);
+      
       setLayers((prev) =>
         prev.map((layer) =>
           layer.id === layerId ? { ...layer, ...updates } : layer
         )
       );
     },
-    []
+    [layers, trackLayerPropertyChange]
   );
 
   const handleLayerRemove = useCallback(
@@ -503,6 +711,9 @@ function App() {
       const layer = layers.find((l) => l.id === layerId);
 
       if (layer) {
+        // Track the removal
+        trackLayerRemove(layerId);
+        
         // Remove layer
         setLayers((prev) => prev.filter((l) => l.id !== layerId));
 
@@ -517,20 +728,25 @@ function App() {
         );
       }
     },
-    [layers, selectedLayerId]
+    [layers, selectedLayerId, trackLayerRemove]
   );
 
   const handleLayerReorder = useCallback(
     (dragIndex: number, dropIndex: number) => {
+      const draggedLayer = layers[dragIndex];
+      if (!draggedLayer) return;
+      
+      // Track the reorder operation
+      trackLayerReorder(dragIndex, dropIndex, draggedLayer.id);
+      
       setLayers((prev) => {
         const newLayers = [...prev];
-        const draggedLayer = newLayers[dragIndex];
         newLayers.splice(dragIndex, 1);
         newLayers.splice(dropIndex, 0, draggedLayer);
         return newLayers;
       });
     },
-    []
+    [layers, trackLayerReorder]
   );
 
   const handleClearLayers = useCallback(() => {
@@ -877,9 +1093,7 @@ function App() {
                     previewData={previewImage}
                     isPreviewMode={isPreviewMode}
                     currentTool={currentTool}
-                    onImageChange={(imageData) =>
-                      handleImageChange(imageData, "Original")
-                    }
+                    onImageChange={handleImageChange}
                     onToolComplete={handleToolComplete}
                     zoom={zoom}
                     setZoom={setZoom}
@@ -997,8 +1211,9 @@ function App() {
                 <HistoryPanel
                   history={history}
                   onHistoryItemSelect={handleHistoryItemSelect}
-                  onRemoveHistoryItem={handleRemoveHistoryItem}
                   onClearHistory={handleClearHistory}
+                  isSelecting={isHistorySelecting}
+                  currentHistoryIndex={currentHistoryIndex}
                 />
               )}
             </div>
@@ -1053,8 +1268,9 @@ function App() {
               <HistoryPanel
                 history={history}
                 onHistoryItemSelect={handleHistoryItemSelect}
-                onRemoveHistoryItem={handleRemoveHistoryItem}
                 onClearHistory={handleClearHistory}
+                isSelecting={isHistorySelecting}
+                currentHistoryIndex={currentHistoryIndex}
               />
             </div>
           </div>
@@ -1121,6 +1337,7 @@ function App() {
           if (compositeImageData) setShowExportDialog(true);
         }}
         hasImage={!!compositeImageData}
+        historyCount={history.length}
       />
     </div>
   );

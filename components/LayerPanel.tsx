@@ -323,17 +323,14 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
             gap: "4px",
           }}
         >
-          <span>
-            📚 {layers.length} layer{layers.length !== 1 ? "s" : ""}
-          </span>
           {selectedLayers.size > 0 && (
             <span style={{ color: "var(--text-primary)" }}>
-              • {selectedLayers.size} selected
+              {selectedLayers.size} selected
             </span>
           )}
           {selectedLayerId && (
             <span style={{ color: "var(--text-primary)" }}>
-              • #{layers.findIndex((l) => l.id === selectedLayerId) + 1} active
+              {selectedLayers.size > 0 ? "• " : ""}#{layers.findIndex((l) => l.id === selectedLayerId) + 1} active
             </span>
           )}
         </div>

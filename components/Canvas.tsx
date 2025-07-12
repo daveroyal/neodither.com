@@ -6,7 +6,7 @@ interface CanvasProps {
   previewData: string | null;
   isPreviewMode: boolean;
   currentTool: string;
-  onImageChange: (imageData: string) => void;
+  onImageChange: (imageData: string, effectName: string) => void;
   onToolComplete?: () => void;
   zoom: number;
   setZoom: (zoom: number) => void;
@@ -661,7 +661,7 @@ export const Canvas: React.FC<CanvasProps> = ({
 
         // Convert to data URL and update image
         const croppedImageData = cropCanvas.toDataURL("image/png", 1.0);
-        onImageChange(croppedImageData);
+        onImageChange(croppedImageData, "Cropped");
 
         // Clear crop selection and reset tool
         setCropSelection(null);
@@ -722,7 +722,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       ctx.restore();
 
       const rotatedImageData = canvas.toDataURL("image/png", 1.0);
-      onImageChange(rotatedImageData);
+      onImageChange(rotatedImageData, "Rotated");
 
       setRotation(0); // Reset rotation state since it's now applied to image
       setIsLoading(false);
@@ -1189,9 +1189,9 @@ export const Canvas: React.FC<CanvasProps> = ({
                   background: "var(--bg-button-hover)",
                   borderColor: "var(--border-window)",
                 }}
-                title="Cancel Crop"
+                title="Cancel"
               >
-                ❌ Cancel Crop
+                ❌ Cancel
               </div>
             </>
           )}
@@ -1228,34 +1228,6 @@ export const Canvas: React.FC<CanvasProps> = ({
 
       {currentImage ? (
         <div style={{ position: "relative" }}>
-          {/* Preview Mode Banner */}
-          {isPreviewMode && (
-            <div
-              style={{
-                position: "absolute",
-                top: "-30px",
-                left: "0",
-                right: "0",
-                background: "linear-gradient(90deg, var(--bg-button-pressed) 0%, var(--bg-button-active) 100%)",
-                color: "var(--text-primary)",
-                padding: "4px 8px",
-                fontSize: "11px",
-                fontWeight: "bold",
-                textAlign: "center",
-                border: "2px outset var(--border-raised)",
-                zIndex: 10,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "4px",
-              }}
-            >
-              <span>👁️</span>
-              <span>LIVE PREVIEW: {previewData ? "Preview" : "Composite"}</span>
-              <span>👁️</span>
-            </div>
-          )}
-
           <canvas
             ref={canvasRef}
             className="win99-canvas"
@@ -1280,6 +1252,36 @@ export const Canvas: React.FC<CanvasProps> = ({
               touchAction: "none", // Prevent browser gestures
             }}
           />
+          
+          {/* Preview Mode Banner - Inside canvas area */}
+          {isPreviewMode && (
+            <div
+              style={{
+                position: "absolute",
+                top: "8px",
+                left: "8px",
+                right: "8px",
+                background: "linear-gradient(90deg, var(--bg-button-pressed) 0%, var(--bg-button-active) 100%)",
+                color: "var(--text-primary)",
+                padding: "4px 8px",
+                fontSize: "11px",
+                fontWeight: "bold",
+                textAlign: "center",
+                border: "2px inset var(--border-raised)",
+                zIndex: 10,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "4px",
+                maxWidth: "fit-content",
+                margin: "0 auto",
+              }}
+            >
+              <span>👁️</span>
+              <span>LIVE PREVIEW: {previewData ? "Preview" : "Composite"}</span>
+              <span>👁️</span>
+            </div>
+          )}
         </div>
       ) : (
         /* No Image State - Upload Area */
@@ -1329,7 +1331,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                   reader.onload = (e) => {
                     const result = e.target?.result as string;
                     if (result) {
-                      onImageChange(result);
+                      onImageChange(result, "Original");
                     }
                   };
                   reader.readAsDataURL(file);

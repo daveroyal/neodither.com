@@ -121,6 +121,7 @@ npm run dev
 - **Single Touch**: Pan around the canvas
 - **Pinch**: Zoom in/out on the canvas
 - **Double Tap**: Reset zoom to fit screen
+- **Effect Preview**: Zoom controls (+/-/Reset) for detailed effect inspection
 
 #### Mobile Navigation
 - **Edit**: Returns to the main canvas view
@@ -133,9 +134,11 @@ npm run dev
 1. Upload an image using the upload button in the toolbar
 2. Navigate to **Effects** to choose and configure effects
 3. Use the large preview to see your changes
-4. Click **Apply** to apply the effect and return to canvas
-5. Switch to **Layers** to manage multiple effects
-6. Use **Save As** to export your finished image
+4. **Zoom in** on the preview to inspect details using the +/- controls
+5. **Double-tap** the preview to quickly reset zoom
+6. Click **Apply** to apply the effect and return to canvas
+7. Switch to **Layers** to manage multiple effects
+8. Use **Save As** to export your finished image
 
 ### Keyboard Shortcuts
 

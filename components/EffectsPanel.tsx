@@ -604,6 +604,13 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
     string | null
   >(null);
   const [layoutResetKey, setLayoutResetKey] = useState(0);
+  
+  // Mobile preview zoom state
+  const [previewZoom, setPreviewZoom] = useState(100);
+  const [previewPanOffset, setPreviewPanOffset] = useState({ x: 0, y: 0 });
+  const [isPreviewPanning, setIsPreviewPanning] = useState(false);
+  const [lastPreviewTouch, setLastPreviewTouch] = useState<{ x: number; y: number } | null>(null);
+  const [lastPreviewTap, setLastPreviewTap] = useState<number>(0);
 
   // Get all effects from all categories
   const allEffects = useMemo(() => {
@@ -647,6 +654,9 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
     setError(null);
     setShowOriginal(false);
     setProcessedImagePreview(null);
+    // Reset zoom state
+    setPreviewZoom(100);
+    setPreviewPanOffset({ x: 0, y: 0 });
     // Force layout reset by changing the key
     setLayoutResetKey(prev => prev + 1);
   }, []);
@@ -752,6 +762,60 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
       return () => clearTimeout(timeoutId);
     }
   }, [isPreviewMode, selectedEffect, currentImage, generateLivePreview]);
+
+  // Mobile preview touch handlers
+  const handlePreviewTouchStart = useCallback((event: React.TouchEvent) => {
+    if (event.touches.length === 1) {
+      const touch = event.touches[0];
+      const now = Date.now();
+      
+      // Check for double tap (within 300ms)
+      if (now - lastPreviewTap < 300) {
+        // Double tap - reset zoom
+        setPreviewZoom(100);
+        setPreviewPanOffset({ x: 0, y: 0 });
+        setLastPreviewTap(0);
+        event.preventDefault(); // Prevent any default behavior
+        return;
+      }
+      
+      setLastPreviewTap(now);
+      setLastPreviewTouch({ x: touch.clientX, y: touch.clientY });
+      setIsPreviewPanning(true);
+    }
+  }, [lastPreviewTap]);
+
+  const handlePreviewTouchMove = useCallback((event: React.TouchEvent) => {
+    if (isPreviewPanning && lastPreviewTouch && event.touches.length === 1) {
+      const touch = event.touches[0];
+      const deltaX = touch.clientX - lastPreviewTouch.x;
+      const deltaY = touch.clientY - lastPreviewTouch.y;
+      
+      // Allow panning at any zoom level to see the whole image
+      setPreviewPanOffset(prev => {
+        const newX = prev.x + deltaX;
+        const newY = prev.y + deltaY;
+        
+        // Calculate bounds - allow generous panning even at 100% or below
+        // At 100% zoom, allow panning up to 200px in any direction
+        const baseOffset = 200;
+        const zoomOffset = Math.max(0, (previewZoom - 100) * 4);
+        const maxOffset = baseOffset + zoomOffset;
+        
+        return {
+          x: Math.max(-maxOffset, Math.min(maxOffset, newX)),
+          y: Math.max(-maxOffset, Math.min(maxOffset, newY))
+        };
+      });
+      
+      setLastPreviewTouch({ x: touch.clientX, y: touch.clientY });
+    }
+  }, [isPreviewPanning, lastPreviewTouch, previewZoom]);
+
+  const handlePreviewTouchEnd = useCallback(() => {
+    setIsPreviewPanning(false);
+    setLastPreviewTouch(null);
+  }, []);
 
   // Reset layout key when preview mode changes
   useEffect(() => {
@@ -1060,7 +1124,7 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
         >
 
 
-          {/* Mobile Preview Thumbnail */}
+          {/* Preview Thumbnail - Show only on mobile */}
           {isMobile && (currentImage || processedImagePreview) && (
             <div
               style={{
@@ -1079,25 +1143,60 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
                   fontFamily: "MS Sans Serif, sans-serif",
                 }}
               >
-                Preview
+                {selectedEffectData ? `${selectedEffectData.name} Preview` : "Preview"} (drag to pan)
               </div>
-                                            {/* Large Preview with Overlay Toggle */}
+                                                                                        {/* Large Preview with Overlay Toggle */}
                <div style={{ textAlign: "center", position: "relative", display: "inline-block" }}>
                  {/* Large Preview Image */}
                  {processedImagePreview ? (
                    <>
-                     <img
-                       src={showOriginal ? currentImage! : processedImagePreview}
-                       alt={showOriginal ? "Original" : "Preview"}
+                     <div
+                       className="preview-zoom-container prevent-zoom"
                        style={{
-                         width: "100%",
-                         height: "auto",
-                         objectFit: "contain",
+                         position: "relative",
+                         overflow: "hidden",
                          border: "2px inset var(--bg-button)",
-                         display: "block",
+                         background: "var(--bg-input)",
                          margin: "0 auto",
+                         width: "100%",
+                         height: "250px",
+                         touchAction: "none",
+                         display: "flex",
+                         alignItems: "center",
+                         justifyContent: "center",
+                         cursor: isPreviewPanning ? "grabbing" : "grab",
                        }}
-                     />
+                       onTouchStart={handlePreviewTouchStart}
+                       onTouchMove={handlePreviewTouchMove}
+                       onTouchEnd={handlePreviewTouchEnd}
+                       onWheel={(e) => {
+                         e.preventDefault();
+                         const delta = e.deltaY > 0 ? -25 : 25;
+                         const newZoom = Math.max(50, Math.min(600, previewZoom + delta));
+                         setPreviewZoom(newZoom);
+                       }}
+                     >
+                       <img
+                         className="preview-zoom-image"
+                         src={showOriginal ? currentImage! : processedImagePreview}
+                         alt={showOriginal ? "Original" : "Preview"}
+                         style={{
+                           width: `${previewZoom}%`,
+                           height: "auto",
+                           maxWidth: "none",
+                           minWidth: "auto",
+                           objectFit: "contain",
+                           transform: `translate(${previewPanOffset.x}px, ${previewPanOffset.y}px)`,
+                           transition: isPreviewPanning ? "none" : "transform 0.1s ease",
+                           flexShrink: 0,
+                           flexGrow: 0,
+                           flexBasis: "auto",
+                           userSelect: "none",
+                         }}
+                         draggable={false}
+                         onLoad={() => console.log('Image loaded with zoom:', previewZoom)}
+                       />
+                     </div>
                      
                      {/* Overlay Toggle Button */}
                      <button
@@ -1124,8 +1223,110 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
                        }}
                        title={showOriginal ? "Show effect" : "Show original"}
                                             >
-                         {showOriginal ? "👁️" : "🚫"}
+                       {showOriginal ? "👁️" : "🚫"}
+                     </button>
+                     
+                     {/* Zoom Controls - Show on both mobile and desktop */}
+                     <div
+                       style={{
+                         position: "absolute",
+                         bottom: "8px",
+                         left: "8px",
+                         display: "flex",
+                         gap: "1px",
+                         background: previewZoom !== 100 ? "var(--bg-button-active)" : "var(--bg-window)",
+                         border: "2px outset var(--border-window)",
+                         padding: "1px",
+                         borderRadius: "2px",
+                         zIndex: 10,
+                         opacity: previewZoom !== 100 ? 0.9 : 0.8,
+                       }}
+                       title="Double-tap to reset zoom"
+                     >
+                       <button
+                         onClick={() => {
+                           const newZoom = Math.max(50, previewZoom - 25);
+                           console.log('Zoom out clicked, current:', previewZoom, 'new:', newZoom);
+                           setPreviewZoom(newZoom);
+                         }}
+                         style={{
+                           fontSize: "10px",
+                           padding: "2px 4px",
+                           minHeight: "20px",
+                           minWidth: "24px",
+                           fontWeight: "bold",
+                           background: previewZoom <= 50 ? "var(--bg-content)" : "var(--bg-button)",
+                           border: "2px outset var(--bg-button)",
+                           color: previewZoom <= 50 ? "var(--text-secondary)" : "var(--text-primary)",
+                           cursor: previewZoom <= 50 ? "not-allowed" : "pointer",
+                           opacity: previewZoom <= 50 ? 0.5 : 1,
+                           touchAction: "manipulation", // Prevent browser zoom
+                         }}
+                         title="Zoom Out"
+                         disabled={previewZoom <= 50}
+                       >
+                         -
                        </button>
+                       <span
+                         style={{
+                           minWidth: "40px",
+                           textAlign: "center",
+                           fontWeight: "bold",
+                           fontSize: "9px",
+                           color: previewZoom !== 100 ? "var(--text-titlebar)" : "var(--text-primary)",
+                           display: "flex",
+                           alignItems: "center",
+                           padding: "0 4px",
+                           background: previewZoom !== 100 ? "var(--bg-button-active)" : "transparent",
+                         }}
+                       >
+                         {Math.round(previewZoom)}%
+                       </span>
+                       <button
+                         onClick={() => {
+                           const newZoom = Math.min(600, previewZoom + 25);
+                           console.log('Zoom in clicked, current:', previewZoom, 'new:', newZoom);
+                           setPreviewZoom(newZoom);
+                         }}
+                         style={{
+                           fontSize: "10px",
+                           padding: "2px 4px",
+                           minHeight: "20px",
+                           minWidth: "24px",
+                           fontWeight: "bold",
+                           background: previewZoom >= 600 ? "var(--bg-content)" : "var(--bg-button)",
+                           border: "2px outset var(--bg-button)",
+                           color: previewZoom >= 600 ? "var(--text-secondary)" : "var(--text-primary)",
+                           cursor: previewZoom >= 600 ? "not-allowed" : "pointer",
+                           opacity: previewZoom >= 600 ? 0.5 : 1,
+                           touchAction: "manipulation", // Prevent browser zoom
+                         }}
+                         title="Zoom In"
+                         disabled={previewZoom >= 600}
+                       >
+                         +
+                       </button>
+                       <button
+                         onClick={() => {
+                           setPreviewZoom(100);
+                           setPreviewPanOffset({ x: 0, y: 0 });
+                         }}
+                         style={{
+                           fontSize: "8px",
+                           padding: "2px 4px",
+                           minHeight: "20px",
+                           minWidth: "28px",
+                           background: "var(--bg-button)",
+                           border: "2px outset var(--bg-button)",
+                           color: "var(--text-primary)",
+                           cursor: "pointer",
+                           touchAction: "manipulation", // Prevent browser zoom
+                         }}
+                         title="Reset zoom"
+                       >
+                         Reset
+                       </button>
+                     </div>
                    </>
                  ) : (
                    <div
@@ -1154,53 +1355,9 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
             </div>
           )}
 
-          {/* Effect Toggle Button - Hidden on Mobile */}
-          {!isMobile && processedImagePreview && (
-            <div
-              style={{
-                display: "flex",
-                gap: "4px",
-                marginBottom: "8px",
-                alignItems: "center",
-              }}
-            >
-              <button
-                onClick={handleComparisonToggle}
-                disabled={isProcessing}
-                style={{
-                  flex: 1,
-                  fontSize: "11px",
-                  padding: "6px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "2px",
-                  background: showOriginal ? "var(--bg-button)" : "var(--bg-button-active)",
-                  color: showOriginal ? "var(--text-primary)" : "var(--text-button-active)",
-                  fontWeight: "bold",
-                  opacity: isProcessing ? 0.7 : 1,
-                  border: showOriginal 
-                    ? "2px outset var(--bg-button)"
-                    : "2px inset var(--bg-button)",
-                  fontFamily: "MS Sans Serif, sans-serif",
-                  borderRadius: "0",
-                  cursor: "pointer",
-                }}
-              >
-                {isProcessing ? (
-                  <>
-                    <span>⏳</span>
-                    <span>Processing...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>{showOriginal ? "✅" : "❌"}</span>
-                    <span>{showOriginal ? "Show Effect" : "Hide Effect"}</span>
-                  </>
-                )}
-              </button>
-            </div>
-          )}
+
+
+
 
           {/* Parameters */}
           <div>
