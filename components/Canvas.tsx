@@ -12,6 +12,219 @@ interface CanvasProps {
   setZoom: (zoom: number) => void;
 }
 
+// Custom hook for Navigator dragging
+const useNavigatorDrag = (
+  containerRef: React.RefObject<HTMLDivElement>,
+  navigatorElementRef: React.RefObject<HTMLDivElement>,
+  initialPosition: { x: number; y: number },
+  isMinimized: boolean
+) => {
+  const [position, setPosition] = useState(initialPosition);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragOffsetRef = useRef({ x: 0, y: 0 });
+  const positionRef = useRef(initialPosition);
+  const animationFrameRef = useRef<number>();
+
+  // Update position with throttling for performance
+  const updatePosition = useCallback((newPosition: { x: number; y: number }) => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+    
+    animationFrameRef.current = requestAnimationFrame(() => {
+      if (navigatorElementRef.current) {
+        navigatorElementRef.current.style.left = `${8 + newPosition.x}px`;
+        navigatorElementRef.current.style.top = `${8 + newPosition.y}px`;
+        positionRef.current = newPosition;
+      }
+    });
+  }, [navigatorElementRef]);
+
+  // Constrain position within container bounds
+  const constrainPosition = useCallback((pos: { x: number; y: number }) => {
+    const containerRect = containerRef.current?.getBoundingClientRect();
+    if (!containerRect) return pos;
+
+    // Use dimensions based on minimized state
+    const navWidth = isMinimized ? 40 : 140; // Minimized vs expanded width
+    const navHeight = isMinimized ? 24 : 140; // Minimized vs expanded height
+    
+    return {
+      x: Math.max(24, Math.min(pos.x, containerRect.width - navWidth - 24)),
+      y: Math.max(24, Math.min(pos.y, containerRect.height - navHeight - 24)),
+    };
+  }, [containerRef, isMinimized]);
+
+  // Calculate new position from client coordinates
+  const calculatePosition = useCallback((clientX: number, clientY: number) => {
+    const containerRect = containerRef.current?.getBoundingClientRect();
+    if (!containerRect) return positionRef.current;
+
+    const newX = clientX - containerRect.left - dragOffsetRef.current.x;
+    const newY = clientY - containerRect.top - dragOffsetRef.current.y;
+    
+    return constrainPosition({ x: newX, y: newY });
+  }, [containerRef, constrainPosition]);
+
+  // Unified drag start handler
+  const handleDragStart = useCallback((clientX: number, clientY: number) => {
+    const rect = navigatorElementRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    dragOffsetRef.current = {
+      x: clientX - rect.left,
+      y: clientY - rect.top,
+    };
+    setIsDragging(true);
+  }, [navigatorElementRef]);
+
+  // Unified drag move handler
+  const handleDragMove = useCallback((clientX: number, clientY: number) => {
+    if (!isDragging) return;
+    
+    const newPosition = calculatePosition(clientX, clientY);
+    updatePosition(newPosition);
+  }, [isDragging, calculatePosition, updatePosition]);
+
+  // Unified drag end handler
+  const handleDragEnd = useCallback(() => {
+    setIsDragging(false);
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+    // Sync state with ref position
+    setPosition(positionRef.current);
+  }, []);
+
+  // Mouse event handlers
+  const handleMouseDown = useCallback((event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    handleDragStart(event.clientX, event.clientY);
+  }, [handleDragStart]);
+
+  const handleMouseMove = useCallback((event: React.MouseEvent) => {
+    handleDragMove(event.clientX, event.clientY);
+  }, [handleDragMove]);
+
+  const handleMouseUp = useCallback(() => {
+    handleDragEnd();
+  }, [handleDragEnd]);
+
+  // Touch event handlers
+  const handleTouchStart = useCallback((event: React.TouchEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const touch = event.touches[0];
+    handleDragStart(touch.clientX, touch.clientY);
+  }, [handleDragStart]);
+
+  const handleTouchMove = useCallback((event: React.TouchEvent) => {
+    if (event.touches.length === 1) {
+      event.preventDefault();
+      const touch = event.touches[0];
+      handleDragMove(touch.clientX, touch.clientY);
+    }
+  }, [handleDragMove]);
+
+  const handleTouchEnd = useCallback(() => {
+    handleDragEnd();
+  }, [handleDragEnd]);
+
+  // Global event handlers for smooth dragging
+  useEffect(() => {
+    const handleGlobalMouseMove = (event: MouseEvent) => {
+      if (isDragging) {
+        handleDragMove(event.clientX, event.clientY);
+      }
+    };
+
+    const handleGlobalTouchMove = (event: TouchEvent) => {
+      if (isDragging && event.touches.length === 1) {
+        event.preventDefault();
+        const touch = event.touches[0];
+        handleDragMove(touch.clientX, touch.clientY);
+      }
+    };
+
+    const handleGlobalMouseUp = () => {
+      handleDragEnd();
+    };
+
+    const handleGlobalTouchEnd = () => {
+      handleDragEnd();
+    };
+
+    if (isDragging) {
+      document.addEventListener('mousemove', handleGlobalMouseMove);
+      document.addEventListener('mouseup', handleGlobalMouseUp);
+      document.addEventListener('touchmove', handleGlobalTouchMove, { passive: false });
+      document.addEventListener('touchend', handleGlobalTouchEnd);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleGlobalMouseMove);
+      document.removeEventListener('mouseup', handleGlobalMouseUp);
+      document.removeEventListener('touchmove', handleGlobalTouchMove);
+      document.removeEventListener('touchend', handleGlobalTouchEnd);
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [isDragging, handleDragMove, handleDragEnd]);
+
+  // Update position when container size changes
+  useEffect(() => {
+    const containerRect = containerRef.current?.getBoundingClientRect();
+    if (containerRect && position.x === 0 && position.y === 0) {
+      // Calculate Navigator dimensions based on its structure
+      // Expanded: ~140px width, ~140px height (header + content + controls + info)
+      // Minimized: ~40px width, ~24px height (header only)
+      // Use expanded dimensions for initial positioning to ensure it fits when expanded
+      const navWidth = 140; // Expanded width
+      const navHeight = 140; // Expanded height
+      
+      // Position in bottom right with generous spacing
+      const maxX = Math.max(24, containerRect.width - navWidth - 24);
+      const maxY = Math.max(24, containerRect.height - navHeight - 24);
+      
+      const newPosition = { x: maxX, y: maxY };
+      setPosition(newPosition);
+      positionRef.current = newPosition;
+    }
+  }, [containerRef, position.x, position.y, isMinimized]);
+
+  // Adjust position when minimized state changes to prevent overflow
+  useEffect(() => {
+    const containerRect = containerRef.current?.getBoundingClientRect();
+    if (containerRect) {
+      const navWidth = isMinimized ? 40 : 140;
+      const navHeight = isMinimized ? 24 : 140;
+      
+      // Check if current position would cause overflow
+      const maxX = Math.max(24, containerRect.width - navWidth - 24);
+      const maxY = Math.max(24, containerRect.height - navHeight - 24);
+      
+      if (position.x > maxX || position.y > maxY) {
+        const newPosition = { x: maxX, y: maxY };
+        setPosition(newPosition);
+        positionRef.current = newPosition;
+      }
+    }
+  }, [isMinimized, containerRef, position.x, position.y]);
+
+  return {
+    position,
+    isDragging,
+    handleMouseDown,
+    handleMouseMove,
+    handleMouseUp,
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd,
+  };
+};
+
 export const Canvas: React.FC<CanvasProps> = ({
   baseImage,
   compositeImage,
@@ -28,6 +241,22 @@ export const Canvas: React.FC<CanvasProps> = ({
   const [canvasSize, setCanvasSize] = useState({ width: 600, height: 400 });
   const [isLoading, setIsLoading] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+
+  // Navigator state
+  const [isNavigatorMinimized, setIsNavigatorMinimized] = useState(false);
+  const navigatorElementRef = useRef<HTMLDivElement>(null);
+  
+  // Use the custom drag hook
+  const {
+    position: navigatorPosition,
+    isDragging: isDraggingNavigator,
+    handleMouseDown: handleNavigatorMouseDown,
+    handleMouseMove: handleNavigatorMouseMove,
+    handleMouseUp: handleNavigatorMouseUp,
+    handleTouchStart: handleNavigatorTouchStart,
+    handleTouchMove: handleNavigatorTouchMove,
+    handleTouchEnd: handleNavigatorTouchEnd,
+  } = useNavigatorDrag(containerRef, navigatorElementRef, { x: 0, y: 0 }, isNavigatorMinimized);
 
   // Tool-specific state
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
@@ -74,9 +303,33 @@ export const Canvas: React.FC<CanvasProps> = ({
     const updateCanvasSize = () => {
       if (containerRef.current) {
         const rect = containerRef.current.getBoundingClientRect();
-        // Remove artificial size limits - use full available space with minimal padding
-        const maxWidth = rect.width - 40; // Small padding for UI elements
-        const maxHeight = rect.height - 40;
+        
+        // Get viewport dimensions for mobile optimization
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        const isMobile = viewportWidth <= 768;
+        
+        // Calculate available space more aggressively on mobile
+        let maxWidth, maxHeight;
+        
+        if (isMobile) {
+          // On mobile, use viewport dimensions with minimal padding
+          // Account for UI elements (toolbar, status bar, etc.)
+          const uiHeight = 140; // Approximate height of toolbar + status bar + safe area
+          const uiWidth = 16; // Minimal horizontal padding
+          
+          maxWidth = viewportWidth - uiWidth;
+          maxHeight = viewportHeight - uiHeight;
+          
+          // Ensure minimum usable size
+          maxWidth = Math.max(maxWidth, 300);
+          maxHeight = Math.max(maxHeight, 200);
+        } else {
+          // Desktop: use container dimensions with minimal padding
+          maxWidth = rect.width - 40;
+          maxHeight = rect.height - 40;
+        }
+        
         setCanvasSize({ width: maxWidth, height: maxHeight });
       }
     };
@@ -118,15 +371,33 @@ export const Canvas: React.FC<CanvasProps> = ({
         displayWidth = displayHeight * aspectRatio;
       }
 
-      // Ensure minimum size for small containers
-      const minSize = Math.min(canvasSize.width, canvasSize.height) * 0.8;
-      if (displayWidth < minSize || displayHeight < minSize) {
-        if (displayWidth < displayHeight) {
-          displayWidth = minSize;
-          displayHeight = displayWidth / aspectRatio;
-        } else {
-          displayHeight = minSize;
-          displayWidth = displayHeight * aspectRatio;
+      // On mobile, be more aggressive about using available space
+      const isMobile = window.innerWidth <= 768;
+      if (isMobile) {
+        // Ensure we use at least 90% of available space on mobile
+        const minSizeRatio = 0.9;
+        const currentSizeRatio = Math.min(displayWidth / canvasSize.width, displayHeight / canvasSize.height);
+        
+        if (currentSizeRatio < minSizeRatio) {
+          if (aspectRatio > containerAspectRatio) {
+            displayWidth = canvasSize.width * minSizeRatio;
+            displayHeight = displayWidth / aspectRatio;
+          } else {
+            displayHeight = canvasSize.height * minSizeRatio;
+            displayWidth = displayHeight * aspectRatio;
+          }
+        }
+      } else {
+        // Desktop: ensure minimum size for small containers
+        const minSize = Math.min(canvasSize.width, canvasSize.height) * 0.8;
+        if (displayWidth < minSize || displayHeight < minSize) {
+          if (displayWidth < displayHeight) {
+            displayWidth = minSize;
+            displayHeight = displayWidth / aspectRatio;
+          } else {
+            displayHeight = minSize;
+            displayWidth = displayHeight * aspectRatio;
+          }
         }
       }
 
@@ -475,6 +746,19 @@ export const Canvas: React.FC<CanvasProps> = ({
     [zoom, setZoom]
   );
 
+  const handleWheel = useCallback(
+    (event: React.WheelEvent<HTMLCanvasElement>) => {
+      event.preventDefault();
+      
+      // Determine zoom direction based on wheel delta
+      const direction = event.deltaY < 0 ? "in" : "out";
+      
+      // Apply zoom
+      handleZoom(direction);
+    },
+    [handleZoom]
+  );
+
   const resetView = useCallback(() => {
     setZoom(100);
     setPanOffset({ x: 0, y: 0 });
@@ -482,14 +766,37 @@ export const Canvas: React.FC<CanvasProps> = ({
   }, [setZoom]);
 
   const getCursorStyle = () => {
-    if (currentTool === "crop") {
-      return "crosshair";
+    switch (currentTool) {
+      case "select":
+        return "default";
+      case "move":
+        return "grab";
+      case "crop":
+        return "crosshair";
+      case "rotate":
+        return "pointer";
+      case "zoom":
+        return "zoom-in";
+      case "fit":
+        return "pointer";
+      case "actual":
+        return "pointer";
+      case "brush":
+        return "crosshair";
+      case "eraser":
+        return "crosshair";
+      case "text":
+        return "text";
+      case "fill":
+        return "pointer";
+      default:
+        return "default";
     }
-    if (currentTool === "rotate") {
-      return "alias";
-    }
-    return "default";
   };
+
+  // Navigator drag handlers are now handled by useNavigatorDrag hook
+
+  // Global event handlers are now handled by useNavigatorDrag hook
 
   const lastTouchRef = useRef<{ x: number; y: number } | null>(null);
   const initialPinchDistanceRef = useRef<number | null>(null);
@@ -609,12 +916,27 @@ export const Canvas: React.FC<CanvasProps> = ({
       {/* Combined Navigator and Zoom Controls */}
       {currentImage && imageLoaded && (
         <div
+          ref={navigatorElementRef}
           style={{
             position: "absolute",
-            bottom: "8px",
-            right: "8px",
+            top: `${8 + navigatorPosition.y}px`,
+            left: `${8 + navigatorPosition.x}px`,
+            bottom: "auto",
+            right: "auto",
+            transform: "none",
             zIndex: 20,
+            cursor: isDraggingNavigator ? "grabbing" : "grab",
+            userSelect: "none",
+            minWidth: "140px",
+            maxWidth: "200px",
           }}
+          onMouseDown={handleNavigatorMouseDown}
+          onMouseMove={handleNavigatorMouseMove}
+          onMouseUp={handleNavigatorMouseUp}
+          onMouseLeave={handleNavigatorMouseUp}
+          onTouchStart={handleNavigatorTouchStart}
+          onTouchMove={handleNavigatorTouchMove}
+          onTouchEnd={handleNavigatorTouchEnd}
         >
           <div
             className="win99-window"
@@ -622,156 +944,184 @@ export const Canvas: React.FC<CanvasProps> = ({
               background: "var(--bg-window)",
               border: "2px outset var(--border-window)",
               padding: "6px",
-              minWidth: "140px",
+              minWidth: isNavigatorMinimized ? "40px" : "140px",
+              transition: isDraggingNavigator ? "none" : "all 0.2s ease",
+              position: "relative",
+              opacity: isDraggingNavigator ? 0.8 : 1,
+              boxShadow: isDraggingNavigator ? "0 4px 12px rgba(0,0,0,0.3)" : "none",
             }}
           >
-            {/* Navigator Section */}
-            <div
-              style={{
-                fontSize: "9px",
-                fontWeight: "bold",
-                marginBottom: "4px",
-                textAlign: "center",
-                color: "var(--text-primary)",
-                borderBottom: "1px solid var(--border-sunken)",
-                paddingBottom: "2px",
-              }}
-            >
-              Navigator
-            </div>
-            <div
-              style={{
-                width: "120px",
-                height: "60px",
-                border: "1px inset var(--border-window)",
-                background: "var(--bg-input)",
-                position: "relative",
-                overflow: "hidden",
-                marginBottom: "6px",
-              }}
-            >
-              <img
-                src={currentImage}
-                alt="Navigator"
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "contain",
-                  opacity: 0.8,
-                }}
-              />
-              {zoomLevel > 1 && (
-                <div
-                  style={{
-                    position: "absolute",
-                    border: "1px solid var(--border-raised)",
-                    background: "rgba(255, 255, 255, 0.2)",
-                    left: `${Math.max(
-                      0,
-                      Math.min(
-                        100 - 100 / zoomLevel,
-                        -(panOffset.x / (canvasSize.width * zoomLevel)) * 100
-                      )
-                    )}%`,
-                    top: `${Math.max(
-                      0,
-                      Math.min(
-                        100 - 100 / zoomLevel,
-                        -(panOffset.y / (canvasSize.height * zoomLevel)) * 100
-                      )
-                    )}%`,
-                    width: `${100 / zoomLevel}%`,
-                    height: `${100 / zoomLevel}%`,
-                    pointerEvents: "none",
-                  }}
-                />
-              )}
-            </div>
-
-            {/* Zoom Controls Section */}
+            {/* Navigator Header with Minimize Button */}
             <div
               style={{
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
-                gap: "4px",
-                fontSize: "10px",
+                marginBottom: isNavigatorMinimized ? "0" : "4px",
+                fontSize: "9px",
+                fontWeight: "bold",
+                color: "var(--text-primary)",
+                borderBottom: isNavigatorMinimized ? "none" : "1px solid var(--border-sunken)",
+                paddingBottom: isNavigatorMinimized ? "0" : "2px",
               }}
             >
-              <button
-                className="win99-button"
-                onClick={() => setZoom(Math.max(25, zoom - 25))}
-                style={{
-                  fontSize: "10px",
-                  padding: "2px 4px",
-                  minHeight: "20px",
-                  minWidth: "24px",
-                  fontWeight: "bold",
-                }}
-                title="Zoom Out"
-              >
-                -
-              </button>
-              <span
-                style={{
-                  minWidth: "40px",
-                  textAlign: "center",
-                  fontWeight: "bold",
-                  fontSize: "9px",
-                }}
-              >
-                {Math.round(zoom)}%
+              <span>
+                Navigator
               </span>
               <button
                 className="win99-button"
-                onClick={() => setZoom(Math.min(500, zoom + 25))}
-                style={{
-                  fontSize: "10px",
-                  padding: "2px 4px",
-                  minHeight: "20px",
-                  minWidth: "24px",
-                  fontWeight: "bold",
-                }}
-                title="Zoom In"
-              >
-                +
-              </button>
-              <button
-                className="win99-button"
-                onClick={() => {
-                  setZoom(100);
-                  setPanOffset({ x: 0, y: 0 });
-                }}
+                onClick={() => setIsNavigatorMinimized(!isNavigatorMinimized)}
                 style={{
                   fontSize: "8px",
-                  padding: "2px 4px",
-                  minHeight: "20px",
-                  minWidth: "28px",
+                  padding: "1px 3px",
+                  minHeight: "16px",
+                  minWidth: "20px",
+                  marginLeft: "4px",
                 }}
-                title="Reset zoom and center image"
+                title={isNavigatorMinimized ? "Expand Navigator" : "Minimize Navigator"}
               >
-                Reset
+                {isNavigatorMinimized ? "➕" : "−"}
               </button>
             </div>
 
-            {/* Canvas Info Section */}
-            <div
-              style={{
-                fontSize: "8px",
-                textAlign: "center",
-                color: "var(--text-secondary)",
-                borderTop: "1px solid var(--border-sunken)",
-                paddingTop: "4px",
-                marginTop: "4px",
-              }}
-            >
-              <div>
-                {canvasSize.width} × {canvasSize.height}
-                {imageLoaded && (
-                  <span style={{ marginLeft: "4px", color: "var(--text-primary)" }}>✓</span>
-                )}
-              </div>
-            </div>
+            {/* Navigator Content */}
+            {!isNavigatorMinimized && (
+              <>
+                <div
+                  style={{
+                    width: "120px",
+                    height: "60px",
+                    border: "1px inset var(--border-window)",
+                    background: "var(--bg-input)",
+                    position: "relative",
+                    overflow: "hidden",
+                    marginBottom: "6px",
+                  }}
+                >
+                  <img
+                    src={currentImage}
+                    alt="Navigator"
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "contain",
+                      opacity: 0.8,
+                    }}
+                  />
+                  {zoomLevel > 1 && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        border: "1px solid var(--border-raised)",
+                        background: "rgba(255, 255, 255, 0.2)",
+                        left: `${Math.max(
+                          0,
+                          Math.min(
+                            100 - 100 / zoomLevel,
+                            -(panOffset.x / (canvasSize.width * zoomLevel)) * 100
+                          )
+                        )}%`,
+                        top: `${Math.max(
+                          0,
+                          Math.min(
+                            100 - 100 / zoomLevel,
+                            -(panOffset.y / (canvasSize.height * zoomLevel)) * 100
+                          )
+                        )}%`,
+                        width: `${100 / zoomLevel}%`,
+                        height: `${100 / zoomLevel}%`,
+                        pointerEvents: "none",
+                      }}
+                    />
+                  )}
+                </div>
+
+                {/* Zoom Controls Section */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "4px",
+                    fontSize: "10px",
+                  }}
+                >
+                  <button
+                    className="win99-button"
+                    onClick={() => setZoom(Math.max(25, zoom - 25))}
+                    style={{
+                      fontSize: "10px",
+                      padding: "2px 4px",
+                      minHeight: "20px",
+                      minWidth: "24px",
+                      fontWeight: "bold",
+                    }}
+                    title="Zoom Out"
+                  >
+                    -
+                  </button>
+                  <span
+                    style={{
+                      minWidth: "40px",
+                      textAlign: "center",
+                      fontWeight: "bold",
+                      fontSize: "9px",
+                    }}
+                  >
+                    {Math.round(zoom)}%
+                  </span>
+                  <button
+                    className="win99-button"
+                    onClick={() => setZoom(Math.min(500, zoom + 25))}
+                    style={{
+                      fontSize: "10px",
+                      padding: "2px 4px",
+                      minHeight: "20px",
+                      minWidth: "24px",
+                      fontWeight: "bold",
+                    }}
+                    title="Zoom In"
+                  >
+                    +
+                  </button>
+                  <button
+                    className="win99-button"
+                    onClick={() => {
+                      setZoom(100);
+                      setPanOffset({ x: 0, y: 0 });
+                    }}
+                    style={{
+                      fontSize: "8px",
+                      padding: "2px 4px",
+                      minHeight: "20px",
+                      minWidth: "28px",
+                    }}
+                    title="Reset zoom and center image"
+                  >
+                    Reset
+                  </button>
+                </div>
+
+                {/* Canvas Info Section */}
+                <div
+                  style={{
+                    fontSize: "8px",
+                    textAlign: "center",
+                    color: "var(--text-secondary)",
+                    borderTop: "1px solid var(--border-sunken)",
+                    paddingTop: "4px",
+                    marginTop: "4px",
+                  }}
+                >
+                  <div>
+                    {canvasSize.width} × {canvasSize.height}
+                    {imageLoaded && (
+                      <span style={{ marginLeft: "4px", color: "var(--text-primary)" }}>✓</span>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -913,6 +1263,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={() => setIsDrawing(false)}
+            onWheel={handleWheel}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}

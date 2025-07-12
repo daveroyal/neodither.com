@@ -947,17 +947,16 @@ function App() {
         {/* Mobile Overlay Panels */}
         {isMobile && mobileView !== "canvas" && (
           <div
+            className="win99-mobile-overlay"
             style={{
               position: "fixed",
               top: 0,
               left: 0,
               right: 0,
               bottom: "64px", // leave space for nav
-              background: "var(--bg-window)",
               zIndex: 1050,
               display: "flex",
               flexDirection: "column",
-              border: "2px outset var(--border-window)",
             }}
           >
             {/* Overlay title bar */}
@@ -1009,7 +1008,7 @@ function App() {
         {/* History Popout */}
         {!isMobile && showHistoryPopout && (
           <div
-            className="win99-history-popout"
+            className="win99-window"
             style={{
               position: "fixed",
               top: "120px",
@@ -1017,9 +1016,6 @@ function App() {
               width: "320px",
               height: "450px",
               zIndex: 1000,
-              background: "var(--bg-window)",
-              border: "2px outset var(--border-window)",
-              boxShadow: "4px 4px 12px rgba(0, 0, 0, 0.4)",
             }}
           >
             <div className="win99-titlebar">

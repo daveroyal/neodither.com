@@ -90,12 +90,44 @@
 }
 
 @layer components {
-  /* Windows 99 Window Styles */
+  /* Enhanced Windows 99 Window Styles with proper borders */
   .win99-window {
     background: var(--bg-window);
     border: 2px outset var(--border-window);
-    box-shadow: inset -1px -1px var(--border-sunken),
-      inset 1px 1px var(--border-raised);
+    box-shadow: 
+      inset -1px -1px var(--border-sunken),
+      inset 1px 1px var(--border-raised),
+      2px 2px 4px var(--shadow-window);
+  }
+
+  /* Main app window with enhanced Windows 99 border */
+  .win99-app {
+    background: var(--bg-window);
+    border: 3px outset var(--border-window);
+    box-shadow: 
+      inset -2px -2px var(--border-sunken),
+      inset 2px 2px var(--border-raised),
+      4px 4px 8px var(--shadow-window),
+      0 0 0 1px var(--border-window);
+    border-radius: 0;
+    overflow: hidden;
+    margin: 8px;
+    height: calc(100vh - 16px);
+    max-height: calc(100vh - 16px);
+  }
+
+  /* Mobile overlay panels with Windows 99 border */
+  .win99-mobile-overlay {
+    background: var(--bg-window);
+    border: 3px outset var(--border-window);
+    box-shadow: 
+      inset -2px -2px var(--border-sunken),
+      inset 2px 2px var(--border-raised),
+      4px 4px 8px var(--shadow-window),
+      0 0 0 1px var(--border-window);
+    border-radius: 0;
+    overflow: hidden;
+    margin: 2px;
   }
 
   .win99-titlebar {
@@ -124,7 +156,7 @@
   .win99-titlebar-icon {
     width: 16px;
     height: 16px;
-    background: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAAdgAAAHYBTnsmCAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3Njape.org5vuPBoAAAFYSURBVDiNpZM9SwNBEIafgwQLwcJCG1sLwcJCG1sLwcJCG1sLwcJCG1sLwcJCG1sLwcJCG1sLwcJCG1sLwcJCG1sLwcJCG1sLwcJCG1sLwcJCG1sLwcJCG1sLwcJCG1sLwcJCG1sL")
+    background: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAAdgAAAHYBTnsmCAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3Njape.org5vuPBoAAAFYSURBVDiNpZM9SwNBEIafgwQLwcJCG1sLwcJCG1sLwcJCG1sLwcJCG1sLwcJCG1sLwcJCG1sLwcJCG1sLwcJCG1sLwcJCG1sLwcJCG1sLwcJCG1sLwcJCG1sLwcJCG1sL")
       no-repeat;
     background-size: contain;
   }
@@ -198,7 +230,7 @@
 
   /* Content Areas */
   .win99-content {
-    padding: 12px;
+    padding: 6px;
     background: var(--bg-content);
     overflow: hidden;
   }
@@ -617,12 +649,14 @@
 
   /* Desktop Background */
   .win99-desktop {
-    min-height: 100vh;
+    height: 100vh;
     background: var(--bg-desktop);
     display: flex;
     flex-direction: column;
-    padding: 12px;
-    gap: 4px;
+    padding: 4px;
+    gap: 2px;
+    box-sizing: border-box;
+    overflow: hidden;
   }
 
   /* Taskbar */
@@ -762,6 +796,18 @@
     min-height: 0; /* Allow canvas to shrink if needed */
   }
 
+  /* Remove canvas border in mobile mode */
+  @media (max-width: 768px) {
+    .win99-canvas-panel {
+      box-shadow: none !important;
+      border: none !important;
+    }
+    
+    .win99-canvas-panel .win99-titlebar {
+      border-bottom: none !important;
+    }
+  }
+
   .win99-canvas-panel .win99-titlebar {
     height: 20px;
     background: var(--bg-titlebar);
@@ -801,6 +847,16 @@
     background: var(--bg-content);
     overflow: hidden;
     min-height: 300px; /* Ensure minimum usable size */
+  }
+
+  /* Mobile canvas container optimization */
+  @media (max-width: 768px) {
+    .win99-canvas-container {
+      min-height: 200px;
+      height: 100% !important;
+      width: 100% !important;
+      padding: 0 !important;
+    }
   }
 
   .win99-canvas {
@@ -982,7 +1038,7 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    padding: 6px;
+    padding: 3px;
   }
 
   /* Better visual hierarchy for panels */
@@ -1499,68 +1555,62 @@ select:focus {
   }
 }
 
-/* Mobile Styles */
-@media (max-width: 768px) {
-  .win99-app {
-    flex-direction: column;
-  }
-
-  .win99-sidebar {
-    width: 100%;
-    max-height: 30vh;
-    border-right: none;
-    border-bottom: 2px inset #c0c0c0;
-  }
-
-  .win99-main-panel {
-    flex: 1;
-    min-height: 40vh;
-  }
-
-  .win99-canvas-area {
-    flex: 1;
-    overflow: auto;
-  }
-}
+/* Mobile Styles - REMOVED CONFLICTING SECTION */
 
 /* Mobile Responsive Design */
 @media (max-width: 768px) {
+  /* Reset mobile app to use flexbox layout instead of absolute positioning */
+      .win99-app {
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 64px - 20px) !important; /* Account for mobile bottom nav + reduced margin */
+      max-height: calc(100vh - 64px - 20px) !important;
+      overflow: hidden;
+      margin: 8px !important;
+    }
+
   .win99-app-content {
+    display: flex;
     flex-direction: column;
-    height: calc(100dvh - 22px); /* subtract titlebar height */
-    overflow: hidden; /* no scrolling container */
+    flex: 1;
+    overflow: hidden;
   }
 
   .win99-main-content {
-    position: absolute;
-    top: 80px; /* titlebar (22) + toolbar (52) */
-    left: 0;
-    right: 0;
-    bottom: 64px; /* bottom nav height */
+    display: flex;
+    flex-direction: column;
+    flex: 1;
     overflow: hidden;
     padding: 0;
     margin: 0;
   }
 
   .win99-toolbar {
-    height: auto;
-    min-height: 64px;
+    height: 60px;
+    min-height: 60px;
+    max-height: 60px;
+    flex-shrink: 0;
+    width: 100%;
+    padding: 0;
   }
 
   .win99-toolbar-content {
-    padding: 4px;
+    padding: 0;
     height: 100%;
     overflow-x: auto;
     overflow-y: hidden;
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 4px;
+    width: 100%;
+    box-sizing: border-box;
   }
 
   .win99-toolbar-panel {
     flex-wrap: wrap;
     gap: 8px;
-    padding: 4px;
+    padding: 0;
     justify-content: center;
   }
 
@@ -1577,9 +1627,14 @@ select:focus {
   }
 
   .win99-toolbar-button {
-    min-height: 38px;
-    min-width: 44px;
-    padding: 3px 5px;
+    min-height: 44px;
+    min-width: 36px;
+    padding: 4px 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    height: 44px;
   }
 
   .win99-toolbar-button-icon {
@@ -1591,7 +1646,7 @@ select:focus {
   }
 
   .win99-toolbar-separator {
-    height: 40px;
+    height: 28px;
     margin: 0 2px;
   }
 
@@ -1603,41 +1658,53 @@ select:focus {
     gap: 8px;
   }
 
-  .win99-main-content {
-    flex-direction: column;
-    height: calc(
-      100vh - 60px - 44px - 24px
-    ); /* mobile toolbar + titlebar + statusbar */
-  }
-
   .win99-effects-sidebar {
     width: 100%;
     min-width: unset;
     max-width: unset;
     border-right: none;
     border-bottom: 2px inset #c0c0c0;
-    height: 200px;
+    height: 160px;
     flex-shrink: 0;
   }
 
   /* Expand effects panel when in preview mode */
   .win99-effects-sidebar:has(.effects-apply-btn) {
-    height: 280px;
+    height: 200px;
   }
 
   .win99-canvas-panel {
     flex: 1;
-    min-height: 200px;
-    height: calc(100dvh - 74px - 64px - 10px); /* viewport - top - bottom - buffer */
-    max-height: calc(100dvh - 74px - 106px - 10px);
+    min-height: 0;
     overflow: hidden;
     margin-bottom: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .win99-canvas-panel .win99-content {
+    flex: 1;
+    padding: 0 !important;
+    height: 100% !important;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-content);
+  }
+
+  .win99-canvas-area {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-content);
   }
 
   .win99-canvas-panel .win99-content {
     padding: 0 !important;
     height: 100% !important;
     overflow: hidden;
+    background: var(--bg-content);
   }
 
   .win99-layers-sidebar {
@@ -1659,10 +1726,25 @@ select:focus {
     touch-action: manipulation;
   }
 
-  /* Mobile effects grid */
+  /* Desktop effects grid - smaller buttons to prevent scrollbar */
   .win99-effects-sidebar .win99-content div[style*="grid"] {
-    grid-template-columns: repeat(5, 1fr) !important;
-    gap: 2px !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 4px !important;
+  }
+
+  /* Desktop effect buttons - smaller to prevent scrollbar */
+  .win99-effects-sidebar .win99-content div[style*="grid"] button {
+    min-height: 24px !important;
+    padding: 3px 4px !important;
+    font-size: 9px !important;
+  }
+
+  /* Mobile effects grid */
+  @media (max-width: 768px) {
+    .win99-effects-sidebar .win99-content div[style*="grid"] {
+      grid-template-columns: repeat(5, 1fr) !important;
+      gap: 2px !important;
+    }
   }
 
   /* Mobile tool panel - handled by new toolbar-panel styles above */
@@ -1686,22 +1768,67 @@ select:focus {
 
   /* Navigator adjustments for mobile */
   .win99-canvas-container > div[style*="bottom: 8px"][style*="right: 8px"] {
-    bottom: 60px !important;
+    bottom: 64px !important;
     right: 8px !important;
+    z-index: 30 !important;
+  }
+
+  /* Mobile navigator styling - allow dragging */
+  @media (max-width: 768px) {
+    .win99-canvas-container > div[style*="position: absolute"][style*="z-index: 20"] {
+      /* Allow natural positioning for dragging */
+      transform: none !important;
+    }
   }
 }
 
 /* Small mobile screens */
 @media (max-width: 480px) {
   .win99-toolbar {
-    height: 60px;
-    padding: 4px;
+    height: 40px;
+    padding: 1px;
   }
 
-  .win99-main-content {
-    height: calc(
-      100vh - 60px - 44px - 24px
-    ); /* updated mobile toolbar + titlebar + statusbar */
+  .win99-toolbar-button {
+    min-height: 24px;
+    min-width: 32px;
+    padding: 1px 2px;
+  }
+
+  .win99-toolbar-separator {
+    height: 24px;
+  }
+
+  .win98-toolbar {
+    height: 40px;
+    padding: 1px 2px;
+  }
+
+  .win98-toolbar-btn,
+  .win98-toolbar-btn-open {
+    height: 34px;
+    padding: 1px 1px;
+  }
+
+  .win98-toolbar-icon {
+    font-size: 12px;
+  }
+
+  .win98-toolbar-text {
+    font-size: 5px;
+    margin-top: 0px;
+  }
+
+  .win98-toolbar-separator {
+    height: 28px;
+  }
+
+  .win99-effects-sidebar {
+    height: 140px;
+  }
+
+  .win99-effects-sidebar:has(.effects-apply-btn) {
+    height: 180px;
   }
 
   .win99-toolbar-panel {
@@ -1736,11 +1863,11 @@ select:focus {
   }
 
   .win99-effects-sidebar {
-    height: 180px;
+    height: 160px;
   }
 
   .win99-layers-sidebar {
-    height: 120px;
+    height: 100px;
   }
 
   .win99-effects-sidebar .win99-content div[style*="grid"] {
@@ -1768,7 +1895,7 @@ select:focus {
 
   /* Expand effects panel more on small screens when in preview mode */
   .win99-effects-sidebar:has(.effects-apply-btn) {
-    height: 300px;
+    height: 220px;
   }
 
   .win99-statusbar {
@@ -1969,9 +2096,9 @@ select:focus {
 /* Windows 98/99 Toolbar */
 .win98-toolbar {
   display: flex;
-  align-items: flex-end;
+  align-items: center; /* changed from flex-end */
   background: var(--bg-content);
-  padding: 12px 12px 8px 8px;
+  padding: 6px 6px 4px 4px;
   height: 68px;
   font-family: "MS Sans Serif", Tahoma, Geneva, Verdana, sans-serif;
   position: relative;
@@ -1981,7 +2108,7 @@ select:focus {
 
 .win98-toolbar-group {
   display: flex;
-  align-items: flex-end;
+  align-items: center; /* changed from flex-end */
   gap: 2px;
 }
 
@@ -1992,7 +2119,7 @@ select:focus {
   justify-content: flex-end;
   width: 48px;
   height: 48px;
-  margin: 16px 2px 0 2px;
+  margin: 0 2px; /* removed top margin */
   padding: 2px 0 0 0;
   background: var(--bg-button);
   border: 2px outset var(--border-raised);
@@ -2003,7 +2130,7 @@ select:focus {
   cursor: pointer;
   outline: none;
   transition: all 0.08s ease;
-  align-self: flex-end;
+  align-self: center; /* changed from flex-end */
 }
 
 .win98-toolbar-btn:hover:not(:disabled) {
@@ -2030,12 +2157,13 @@ select:focus {
   transform: none;
 }
 .win98-toolbar-btn-open {
-  margin: 16px 6px 0 2px;
+  margin: 0 6px 0 2px; /* removed top margin */
   background: var(--bg-button-hover);
   border: 2px outset var(--border-raised);
   box-shadow: 1px 1px 0 var(--border-sunken), 0 0 0 1px var(--bg-button) inset;
   font-weight: bold;
   position: relative;
+  align-self: center; /* changed from flex-end */
 }
 
 .win98-toolbar-btn-open::after {
@@ -2083,10 +2211,10 @@ select:focus {
     var(--border-raised) 50%,
     var(--border-sunken) 100%
   );
-  margin: 8px 8px 0 8px;
+  margin: 0 8px; /* removed top margin */
   border-left: 1px solid var(--border-sunken);
   border-right: 1px solid var(--border-raised);
-  align-self: flex-end;
+  align-self: center; /* ensure vertical centering */
 }
 
 .win98-toolbar-status {
@@ -2258,7 +2386,6 @@ select:focus {
       height: 100vh;
       height: 100dvh; /* use dynamic viewport height on mobile */
       overflow: hidden;
-      position: fixed;
       width: 100%;
     }
 
@@ -2266,47 +2393,41 @@ select:focus {
       height: 100vh;
       height: 100dvh;
       overflow: hidden;
-      position: fixed;
       width: 100%;
-      top: 0;
-      left: 0;
     }
 
     .win99-app {
-      height: 100dvh;
+      height: calc(100dvh - 64px - 26px) !important; /* Account for mobile bottom nav + reduced margin */
+      max-height: calc(100dvh - 64px - 26px) !important;
       overflow: hidden;
-    }
-
-    .win99-app-content {
-      height: calc(100dvh - 22px); /* subtract titlebar height */
-      overflow: hidden; /* no scrolling container */
-      position: relative;
+      margin: 8px !important;
     }
 
     /* Refine top toolbar buttons for mobile */
     .win98-toolbar {
-      height: 52px;
-      padding: 2px 4px; /* add back some side padding */
-      gap: 2px; /* small gap for breathing room */
-      overflow-x: visible; /* show all buttons */
+      height: 60px;
+      padding: 0;
+      gap: 2px;
+      overflow-x: visible;
       flex-wrap: nowrap;
-      justify-content: space-between; /* distribute evenly */
+      justify-content: space-between;
       width: 100%;
       box-sizing: border-box;
     }
 
     .win98-toolbar-btn,
     .win98-toolbar-btn-open {
-      flex: 1 1 0; /* equal flex basis for even distribution */
-      min-width: 0; /* allow buttons to shrink evenly */
-      height: 46px;
+      flex: 1 1 0;
+      min-width: 0;
+      height: 44px;
       margin: 0;
-      padding: 2px 1px;
+      padding: 4px 0;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       box-shadow: inset -1px -1px var(--border-sunken), inset 1px 1px var(--border-raised);
       border: 2px outset var(--border-window);
+      box-sizing: border-box;
     }
 
     .win98-toolbar-btn-open {
@@ -2314,21 +2435,21 @@ select:focus {
     }
 
     .win98-toolbar-icon {
-      font-size: 16px;
+      font-size: 14px;
       margin: 0;
     }
 
     .win98-toolbar-text {
-      font-size: 7px;
-      margin-top: 2px;
+      font-size: 6px;
+      margin-top: 1px;
       line-height: 1;
     }
 
     .win98-toolbar-separator {
-      height: 40px;
+      height: 32px;
       margin: 0;
       width: 1px;
-      flex-shrink: 0; /* don't shrink separators */
+      flex-shrink: 0;
       align-self: center;
     }
   }
