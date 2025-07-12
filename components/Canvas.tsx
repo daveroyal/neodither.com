@@ -753,6 +753,25 @@ export const Canvas: React.FC<CanvasProps> = ({
                 Reset
               </button>
             </div>
+
+            {/* Canvas Info Section */}
+            <div
+              style={{
+                fontSize: "8px",
+                textAlign: "center",
+                color: "var(--text-secondary)",
+                borderTop: "1px solid var(--border-sunken)",
+                paddingTop: "4px",
+                marginTop: "4px",
+              }}
+            >
+              <div>
+                {canvasSize.width} × {canvasSize.height}
+                {imageLoaded && (
+                  <span style={{ marginLeft: "4px", color: "var(--text-primary)" }}>✓</span>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -910,26 +929,6 @@ export const Canvas: React.FC<CanvasProps> = ({
               touchAction: "none", // Prevent browser gestures
             }}
           />
-
-          {/* Canvas Info */}
-          <div
-            style={{
-              position: "absolute",
-              bottom: "-25px",
-              left: "0",
-              right: "0",
-              textAlign: "center",
-              fontSize: "10px",
-              color: "var(--text-secondary)",
-            }}
-          >
-            <div>
-              {canvasSize.width} × {canvasSize.height} • {Math.round(zoom)}%
-              {imageLoaded && (
-                <span style={{ marginLeft: "8px", color: "var(--text-primary)" }}>✓</span>
-              )}
-            </div>
-          </div>
         </div>
       ) : (
         /* No Image State - Upload Area */
