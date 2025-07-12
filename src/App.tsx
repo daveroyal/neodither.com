@@ -1175,7 +1175,19 @@ function App() {
           >
             {/* Overlay title bar */}
             <div className="win99-titlebar">
-              <div className="win99-titlebar-text" style={{ cursor: "pointer" }} onClick={() => setMobileView("canvas")}>⬅️ Back</div>
+              <div 
+                className="win99-titlebar-text" 
+                style={{ cursor: "pointer" }} 
+                onClick={() => {
+                  if (isPreviewMode) {
+                    handleCancelPreview();
+                  } else {
+                    setMobileView("canvas");
+                  }
+                }}
+              >
+                {isPreviewMode ? "✕ Cancel" : "⬅️ Back"}
+              </div>
             </div>
             <div className="win99-content win99-scrollbar" style={{ flex: 1 }}>
               {mobileView === "effects" && (

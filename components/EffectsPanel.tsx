@@ -611,6 +611,8 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
   const [isPreviewPanning, setIsPreviewPanning] = useState(false);
   const [lastPreviewTouch, setLastPreviewTouch] = useState<{ x: number; y: number } | null>(null);
   const [lastPreviewTap, setLastPreviewTap] = useState<number>(0);
+  const [initialPinchDistance, setInitialPinchDistance] = useState<number | null>(null);
+  const [initialPinchZoom, setInitialPinchZoom] = useState<number>(100);
 
   // Get all effects from all categories
   const allEffects = useMemo(() => {
@@ -765,17 +767,31 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
 
   // Mobile preview touch handlers
   const handlePreviewTouchStart = useCallback((event: React.TouchEvent) => {
+    if (event.touches.length === 2) {
+      // Pinch start - store initial distance and zoom
+      event.preventDefault();
+      const [t1, t2] = Array.from(event.touches);
+      const dx = t2.clientX - t1.clientX;
+      const dy = t2.clientY - t1.clientY;
+      const distance = Math.hypot(dx, dy);
+      setInitialPinchDistance(distance);
+      setInitialPinchZoom(previewZoom);
+      setIsPreviewPanning(false);
+      return;
+    }
+    
     if (event.touches.length === 1) {
+      event.preventDefault(); // Prevent scrolling and other browser behaviors
       const touch = event.touches[0];
       const now = Date.now();
       
       // Check for double tap (within 300ms)
       if (now - lastPreviewTap < 300) {
-        // Double tap - reset zoom
+        // Double tap - reset zoom and pan
         setPreviewZoom(100);
         setPreviewPanOffset({ x: 0, y: 0 });
         setLastPreviewTap(0);
-        event.preventDefault(); // Prevent any default behavior
+        setIsPreviewPanning(false);
         return;
       }
       
@@ -783,24 +799,37 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
       setLastPreviewTouch({ x: touch.clientX, y: touch.clientY });
       setIsPreviewPanning(true);
     }
-  }, [lastPreviewTap]);
+  }, [lastPreviewTap, previewZoom]);
 
   const handlePreviewTouchMove = useCallback((event: React.TouchEvent) => {
+    if (event.touches.length === 2 && initialPinchDistance !== null) {
+      // Handle pinch-to-zoom
+      event.preventDefault();
+      const [t1, t2] = Array.from(event.touches);
+      const dx = t2.clientX - t1.clientX;
+      const dy = t2.clientY - t1.clientY;
+      const currentDistance = Math.hypot(dx, dy);
+      const ratio = currentDistance / initialPinchDistance;
+      const newZoom = Math.max(50, Math.min(600, initialPinchZoom * ratio));
+      setPreviewZoom(newZoom);
+      return;
+    }
+    
     if (isPreviewPanning && lastPreviewTouch && event.touches.length === 1) {
+      event.preventDefault(); // Prevent scrolling and other browser behaviors
       const touch = event.touches[0];
       const deltaX = touch.clientX - lastPreviewTouch.x;
       const deltaY = touch.clientY - lastPreviewTouch.y;
       
-      // Allow panning at any zoom level to see the whole image
+      // Simplified panning bounds calculation for transform-based scaling
       setPreviewPanOffset(prev => {
         const newX = prev.x + deltaX;
         const newY = prev.y + deltaY;
         
-        // Calculate bounds - allow generous panning even at 100% or below
-        // At 100% zoom, allow panning up to 200px in any direction
-        const baseOffset = 200;
-        const zoomOffset = Math.max(0, (previewZoom - 100) * 4);
-        const maxOffset = baseOffset + zoomOffset;
+        // Calculate maximum pan offset based on zoom level
+        // At 100% zoom, allow minimal panning; at higher zoom, allow more
+        const zoomFactor = previewZoom / 100;
+        const maxOffset = Math.max(50, (zoomFactor - 1) * 150 + 50);
         
         return {
           x: Math.max(-maxOffset, Math.min(maxOffset, newX)),
@@ -810,11 +839,22 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
       
       setLastPreviewTouch({ x: touch.clientX, y: touch.clientY });
     }
-  }, [isPreviewPanning, lastPreviewTouch, previewZoom]);
+  }, [isPreviewPanning, lastPreviewTouch, previewZoom, initialPinchDistance, initialPinchZoom]);
 
-  const handlePreviewTouchEnd = useCallback(() => {
-    setIsPreviewPanning(false);
-    setLastPreviewTouch(null);
+  const handlePreviewTouchEnd = useCallback((event: React.TouchEvent) => {
+    event.preventDefault(); // Prevent any default behaviors
+    
+    // Reset pinch state when ending touch
+    if (event.touches.length < 2) {
+      setInitialPinchDistance(null);
+      setInitialPinchZoom(100);
+    }
+    
+    // Reset panning state when no touches remain
+    if (event.touches.length === 0) {
+      setIsPreviewPanning(false);
+      setLastPreviewTouch(null);
+    }
   }, []);
 
   // Reset layout key when preview mode changes
@@ -901,6 +941,7 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
       )}
 
       {/* Search and Filter Section */}
+      {!(isMobile && isPreviewMode) && (
       <div
         style={{
           padding: "8px",
@@ -1030,10 +1071,10 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
           ))}
         </div>
       </div>
-
-
+      )}
 
       {/* Effect Buttons Grid */}
+      {!(isMobile && isPreviewMode) && (
       <div 
         key={layoutResetKey} 
         style={{ flex: 1, overflow: "auto" }} 
@@ -1113,12 +1154,13 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
           })}
         </div>
       </div>
+      )}
 
       {/* Live Preview Controls */}
       {isPreviewMode && selectedEffect && selectedEffectData && (
         <div
           style={{
-            padding: "8px",
+            padding: "0",
             background: "var(--bg-primary)",
           }}
         >
@@ -1129,7 +1171,7 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
             <div
               style={{
                 marginBottom: "12px",
-                padding: "8px",
+                padding: "0",
                 background: "var(--bg-primary)",
               }}
             >
@@ -1146,7 +1188,7 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
                 {selectedEffectData ? `${selectedEffectData.name} Preview` : "Preview"} (drag to pan)
               </div>
                                                                                         {/* Large Preview with Overlay Toggle */}
-               <div style={{ textAlign: "center", position: "relative", display: "inline-block" }}>
+               <div style={{ textAlign: "center", position: "relative", display: "block", width: "100%" }}>
                  {/* Large Preview Image */}
                  {processedImagePreview ? (
                    <>
@@ -1157,14 +1199,14 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
                          overflow: "hidden",
                          border: "2px inset var(--bg-button)",
                          background: "var(--bg-input)",
-                         margin: "0 auto",
+                         margin: "0",
                          width: "100%",
-                         height: "250px",
+                         height: "40vh",
                          touchAction: "none",
+                         cursor: isPreviewPanning ? "grabbing" : "grab",
                          display: "flex",
                          alignItems: "center",
                          justifyContent: "center",
-                         cursor: isPreviewPanning ? "grabbing" : "grab",
                        }}
                        onTouchStart={handlePreviewTouchStart}
                        onTouchMove={handlePreviewTouchMove}
@@ -1181,20 +1223,16 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
                          src={showOriginal ? currentImage! : processedImagePreview}
                          alt={showOriginal ? "Original" : "Preview"}
                          style={{
-                           width: `${previewZoom}%`,
-                           height: "auto",
-                           maxWidth: "none",
-                           minWidth: "auto",
+                           maxWidth: "100%",
+                           maxHeight: "100%",
                            objectFit: "contain",
-                           transform: `translate(${previewPanOffset.x}px, ${previewPanOffset.y}px)`,
+                           transform: `translate(${previewPanOffset.x}px, ${previewPanOffset.y}px) scale(${previewZoom / 100})`,
+                           transformOrigin: "center center",
                            transition: isPreviewPanning ? "none" : "transform 0.1s ease",
-                           flexShrink: 0,
-                           flexGrow: 0,
-                           flexBasis: "auto",
                            userSelect: "none",
                          }}
                          draggable={false}
-                         onLoad={() => console.log('Image loaded with zoom:', previewZoom)}
+                         onLoad={() => {}}
                        />
                      </div>
                      
@@ -1246,14 +1284,13 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
                        <button
                          onClick={() => {
                            const newZoom = Math.max(50, previewZoom - 25);
-                           console.log('Zoom out clicked, current:', previewZoom, 'new:', newZoom);
                            setPreviewZoom(newZoom);
                          }}
                          style={{
                            fontSize: "10px",
-                           padding: "2px 4px",
-                           minHeight: "20px",
-                           minWidth: "24px",
+                           padding: "4px 6px",
+                           minHeight: "24px",
+                           minWidth: "28px",
                            fontWeight: "bold",
                            background: previewZoom <= 50 ? "var(--bg-content)" : "var(--bg-button)",
                            border: "2px outset var(--bg-button)",
@@ -1285,14 +1322,13 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
                        <button
                          onClick={() => {
                            const newZoom = Math.min(600, previewZoom + 25);
-                           console.log('Zoom in clicked, current:', previewZoom, 'new:', newZoom);
                            setPreviewZoom(newZoom);
                          }}
                          style={{
                            fontSize: "10px",
-                           padding: "2px 4px",
-                           minHeight: "20px",
-                           minWidth: "24px",
+                           padding: "4px 6px",
+                           minHeight: "24px",
+                           minWidth: "28px",
                            fontWeight: "bold",
                            background: previewZoom >= 600 ? "var(--bg-content)" : "var(--bg-button)",
                            border: "2px outset var(--bg-button)",
@@ -1313,8 +1349,8 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
                          }}
                          style={{
                            fontSize: "8px",
-                           padding: "2px 4px",
-                           minHeight: "20px",
+                           padding: "4px 6px",
+                           minHeight: "24px",
                            minWidth: "28px",
                            background: "var(--bg-button)",
                            border: "2px outset var(--bg-button)",
@@ -1465,7 +1501,7 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({
           </div>
 
           {/* Preview Action Buttons */}
-          <div style={{ display: "flex", gap: "4px", marginTop: "8px" }}>
+          <div style={{ display: "flex", gap: "4px", marginTop: "8px", marginBottom: isMobile ? "20px" : "0" }}>
             <button
               onClick={handleApplyPreview}
               disabled={isProcessing}
